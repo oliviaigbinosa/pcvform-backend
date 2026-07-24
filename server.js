@@ -18,6 +18,10 @@ app.use('/api/admin', adminRoutes)
 app.use('/api', emailRoutes)
 app.use('/api', voucherRoutes)
 
+app.get('/', (_req, res) => {
+  res.json({ status: 'ok' })
+})
+
 const port = process.env.PORT || 3001
 
 connectDb()

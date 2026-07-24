@@ -20,7 +20,7 @@ export async function seedAdmin() {
     if (!existing) {
       const hashed = await bcrypt.hash(adminPassword, 10)
       await Admin.create({ email: adminEmail.toLowerCase(), password: hashed, role: 'admin' })
-      console.log(`Seeded admin account: ${adminEmail}`)
+      console.log('Seeded admin account')
     }
   } else {
     console.warn('ADMIN_EMAIL or ADMIN_PASSWORD not set — skipping admin seed')
@@ -37,6 +37,6 @@ export async function seedAdmin() {
   if (!existingSuper) {
     const hashed = await bcrypt.hash(superPassword, 10)
     await Admin.create({ email: superEmail.toLowerCase(), password: hashed, role: 'super admin' })
-    console.log(`Seeded super admin account: ${superEmail}`)
+    console.log('Seeded super admin account')
   }
 }

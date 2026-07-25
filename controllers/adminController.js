@@ -8,12 +8,12 @@ function isUserEmail(email) {
 
 export const listUsers = async (_req, res) => {
   try {
-    const users = await User.find({}, '-password').sort({ createdAt: 1 })
-    const admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password').sort({ createdAt: 1 })
+    const users = await User.find({}, '-password').sort({ createdAt: -1 })
+    const admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password').sort({ createdAt: -1 })
     const all = [...users, ...admins].sort((a, b) => {
       const aDate = a.createdAt ? new Date(a.createdAt) : new Date(1)
       const bDate = b.createdAt ? new Date(b.createdAt) : new Date(1)
-      return aDate - bDate
+      return bDate - aDate
     })
     return res.json(
       all.map((user) => ({

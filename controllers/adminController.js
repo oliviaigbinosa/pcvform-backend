@@ -21,6 +21,7 @@ export const listUsers = async (_req, res) => {
         email: user.email,
         addedAt: user.createdAt ? user.createdAt.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         role: user.role || 'user',
+        department: user.department || '',
       })),
     )
   } catch (error) {
@@ -71,6 +72,7 @@ export const createUser = async (req, res) => {
       email: user.email,
       addedAt: user.createdAt.toISOString().slice(0, 10),
       role: user.role || (isAdmin ? 'admin' : 'user'),
+      department: user.department || '',
     })
   } catch (error) {
     console.error('Failed to create user', error)

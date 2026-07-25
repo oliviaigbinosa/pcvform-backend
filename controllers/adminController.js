@@ -10,12 +10,14 @@ export const listUsers = async (_req, res) => {
   try {
     const users = await User.find({}, '-password')
     const admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password')
-    const all = [...users, ...admins]
+    const all = [...users, ...admins].sort(
+      (a, b) => (b.createdAt?.getTime?.() || 0) - (a.createdAt?.getTime?.() || 0),
+    )
     return res.json(
       all.map((user) => ({
         id: user._id.toString(),
         email: user.email,
-        addedAt: user.createdAt ? user.createdAt.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+        addedAt: user.createdAt ? user.createdAt.toISOString() : new Date().toISOString(),
         role: user.role || 'user',
         department: user.department || '',
       })),
@@ -66,7 +68,7 @@ export const createUser = async (req, res) => {
     return res.status(201).json({
       id: user._id.toString(),
       email: user.email,
-      addedAt: user.createdAt.toISOString().slice(0, 10),
+      addedAt: user.createdAt.toISOString(),
       role: user.role || (isAdmin ? 'admin' : 'user'),
       department: user.department || '',
     })

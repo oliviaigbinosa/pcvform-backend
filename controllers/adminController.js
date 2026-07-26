@@ -53,10 +53,9 @@ export const createUser = async (req, res) => {
       }
     }
 
-    const existing = isAdmin
-      ? await Admin.findOne({ email: normalizedEmail })
-      : await User.findOne({ email: normalizedEmail })
-    if (existing) {
+    const existingUser = await User.findOne({ email: normalizedEmail })
+    const existingAdmin = await Admin.findOne({ email: normalizedEmail })
+    if (existingUser || existingAdmin) {
       return res.status(409).json({ error: 'This user has already been added' })
     }
 

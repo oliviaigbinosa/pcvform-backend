@@ -13,19 +13,6 @@ export async function connectDb() {
 }
 
 export async function seedAdmin() {
-  const adminEmail = process.env.ADMIN_EMAIL
-  const adminPassword = process.env.ADMIN_PASSWORD
-  if (adminEmail && adminPassword) {
-    const existing = await Admin.findOne({ email: adminEmail.toLowerCase() })
-    if (!existing) {
-      const hashed = await bcrypt.hash(adminPassword, 10)
-      await Admin.create({ email: adminEmail.toLowerCase(), password: hashed, role: 'admin' })
-      console.log('Seeded admin account')
-    }
-  } else {
-    console.warn('ADMIN_EMAIL or ADMIN_PASSWORD not set — skipping admin seed')
-  }
-
   const superEmail = process.env.SUPER_ADMIN_EMAIL
   const superPassword = process.env.SUPER_ADMIN_PASSWORD
   if (!superEmail || !superPassword) {

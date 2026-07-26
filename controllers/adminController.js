@@ -15,7 +15,7 @@ export const listUsers = async (_req, res) => {
     const users = await User.find({}, '-password')
     const admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password')
     const all = [...users, ...admins].sort(
-      (a, b) => getCreatedAt(b).getTime() - getCreatedAt(a).getTime(),
+      (a, b) => getCreatedAt(a).getTime() - getCreatedAt(b).getTime(),
     )
     return res.json(
       all.map((user) => ({

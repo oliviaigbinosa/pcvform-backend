@@ -140,6 +140,9 @@ Your login credentials:
 Email: ${to}
 Password: ${password}
 
+Click the link below to sign in:
+https://pettycashvoucher.netlify.app/login
+
 Please log in and change your password after your first login.
 
 If you have any questions, please contact your administrator.`

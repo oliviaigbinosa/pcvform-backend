@@ -1,4 +1,5 @@
 import Voucher from '../models/Voucher.js'
+import Admin from '../models/Admin.js'
 
 export const getVouchers = async (_req, res) => {
   try {
@@ -36,6 +37,17 @@ export const updateVoucherStatus = async (req, res) => {
     const { status } = req.body
     if (!status) {
       return res.status(400).json({ error: 'Status is required' })
+    }
+
+    if (status === 'Processed') {
+      const updater = String(req.headers['x-user-email'] || '').trim().toLowerCase()
+      if (!updater) {
+        return res.status(403).json({ error: 'Super admin email required' })
+      }
+      const admin = await Admin.findOne({ email: updater, role: 'super admin' })
+      if (!admin) {
+        return res.status(403).json({ error: 'Only super admins can process vouchers' })
+      }
     }
 
     const voucher = await Voucher.findOneAndUpdate(

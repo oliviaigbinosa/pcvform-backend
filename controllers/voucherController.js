@@ -1,9 +1,24 @@
 import Voucher from '../models/Voucher.js'
 import Admin from '../models/Admin.js'
+import User from '../models/User.js'
 
-export const getVouchers = async (_req, res) => {
+export const getVouchers = async (req, res) => {
   try {
-    const vouchers = await Voucher.find().sort({ createdAt: -1 })
+    const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const admin = await Admin.findOne({ email })
+
+    let query = {}
+    if (admin && admin.role !== 'super admin') {
+      const users = await User.find({ createdBy: email }, 'email')
+      const emails = users.map((user) => user.email)
+      if (emails.length > 0) {
+        query = { from: { $in: emails } }
+      } else {
+        query = { _id: { $in: [] } }
+      }
+    }
+
+    const vouchers = await Voucher.find(query).sort({ createdAt: -1 })
     return res.json(vouchers)
   } catch (error) {
     console.error('Failed to list vouchers', error)

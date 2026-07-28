@@ -30,7 +30,7 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
-    return res.json({ email: user.email, role: 'user', department: user.department || '' })
+    return res.json({ email: user.email, role: 'user', department: user.department || '', createdBy: user.createdBy || '' })
   } catch (error) {
     console.error('Login failed', error)
     return res.status(500).json({ error: 'Login failed' })
@@ -94,7 +94,7 @@ export const getMe = async (req, res) => {
       return res.status(404).json({ error: 'User not found' })
     }
 
-    return res.json({ email: user.email, role: 'user', department: user.department || '' })
+    return res.json({ email: user.email, role: 'user', department: user.department || '', createdBy: user.createdBy || '' })
   } catch (error) {
     console.error('Get me failed', error)
     return res.status(500).json({ error: 'Failed to fetch user' })

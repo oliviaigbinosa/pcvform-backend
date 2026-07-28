@@ -10,10 +10,22 @@ function getCreatedAt(user) {
   return user.createdAt || user._id.getTimestamp()
 }
 
-export const listUsers = async (_req, res) => {
+export const listUsers = async (req, res) => {
   try {
-    const users = await User.find({}, '-password')
-    const admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password')
+    const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const requestingAdmin = await Admin.findOne({ email }, '-password')
+    const isSuper = requestingAdmin?.role === 'super admin'
+
+    let users = []
+    let admins = []
+
+    if (isSuper) {
+      users = await User.find({}, '-password')
+      admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password')
+    } else {
+      users = await User.find({ createdBy: email }, '-password')
+    }
+
     const all = [...users, ...admins].sort(
       (a, b) => getCreatedAt(a).getTime() - getCreatedAt(b).getTime(),
     )

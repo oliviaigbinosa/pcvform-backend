@@ -17,7 +17,7 @@ export const login = async (req, res) => {
       if (!valid) {
         return res.status(401).json({ error: 'Invalid email or password' })
       }
-      return res.json({ email: admin.email, role: admin.role || 'admin' })
+      return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
     }
 
     const user = await User.findOne({ email: normalizedEmail })
@@ -30,7 +30,7 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
-    return res.json({ email: user.email, role: 'user' })
+    return res.json({ email: user.email, role: 'user', department: user.department || '' })
   } catch (error) {
     console.error('Login failed', error)
     return res.status(500).json({ error: 'Login failed' })
@@ -74,5 +74,29 @@ export const changePassword = async (req, res) => {
   } catch (error) {
     console.error('Change password failed', error)
     return res.status(500).json({ error: 'Failed to update password' })
+  }
+}
+
+export const getMe = async (req, res) => {
+  try {
+    const email = String(req.headers['x-user-email'] || '').trim().toLowerCase()
+    if (!email) {
+      return res.status(401).json({ error: 'Email required' })
+    }
+
+    const admin = await Admin.findOne({ email })
+    if (admin) {
+      return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
+    }
+
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    return res.json({ email: user.email, role: 'user', department: user.department || '' })
+  } catch (error) {
+    console.error('Get me failed', error)
+    return res.status(500).json({ error: 'Failed to fetch user' })
   }
 }

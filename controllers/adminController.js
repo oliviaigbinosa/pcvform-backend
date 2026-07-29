@@ -95,13 +95,36 @@ export const createUser = async (req, res) => {
 
 export const deleteUser = async (req, res) => {
   try {
-    let user = await User.findByIdAndDelete(req.params.id)
+    const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    if (!requesterEmail) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+
+    const requester = await Admin.findOne({ email: requesterEmail })
+    if (!requester) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    const isSuper = requester.role === 'super admin'
+
+    let user = await User.findById(req.params.id)
     if (!user) {
-      user = await Admin.findByIdAndDelete(req.params.id)
+      user = await Admin.findById(req.params.id)
     }
     if (!user) {
       return res.status(404).json({ error: 'User not found' })
     }
+
+    const targetRole = user.role || 'user'
+    if (!isSuper) {
+      if (targetRole === 'admin') {
+        return res.status(403).json({ error: 'Only super admins can delete admin accounts' })
+      }
+      if (String(user.createdBy || '').toLowerCase() !== requesterEmail) {
+        return res.status(403).json({ error: 'You can only delete users you created' })
+      }
+    }
+
+    await user.deleteOne()
     return res.json({ ok: true })
   } catch (error) {
     console.error('Failed to delete user', error)

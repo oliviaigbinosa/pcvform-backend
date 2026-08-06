@@ -319,3 +319,48 @@ export const sendVoucherEmail = async (req, res) => {
     return res.status(500).json({ error: 'Failed to send voucher email' })
   }
 }
+
+export const sendLeaveRequestEmail = async (leave) => {
+  const {
+    employeeName,
+    departmentManager,
+    department,
+    leaveType,
+    startDate,
+    endDate,
+    reason,
+    submittedBy,
+  } = leave
+
+  if (!departmentManager) {
+    throw new Error('Department manager email is required to send leave request email')
+  }
+
+  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER
+  if (!fromEmail) {
+    throw new Error('FROM email is not configured')
+  }
+
+  const text = `LEAVE REQUEST SUBMITTED
+
+Employee Name:    ${employeeName || ''}
+Department:       ${department || ''}
+Leave Type:       ${leaveType || ''}
+Start Date:       ${startDate || ''}
+End Date:         ${endDate || ''}
+
+Reason:
+${reason || ''}
+
+Submitted By:     ${submittedBy || ''}
+`
+
+  const info = await sendMail({
+    from: formatAddress(fromEmail, getDisplayName(fromEmail)),
+    to: formatAddress(departmentManager, employeeName),
+    subject: `Leave Request: ${employeeName || ''}`,
+    text,
+  })
+
+  return info
+}

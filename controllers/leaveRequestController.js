@@ -1,6 +1,7 @@
 import LeaveRequest from '../models/LeaveRequest.js'
 import Admin from '../models/Admin.js'
 import User from '../models/User.js'
+import { sendLeaveRequestEmail } from '../controllers/emailController.js'
 
 export const getLeaveRequests = async (req, res) => {
   try {
@@ -45,7 +46,18 @@ export const createLeaveRequest = async (req, res) => {
       submittedBy,
     })
 
-    return res.status(201).json({ ...leave.toObject(), id: leave._id.toString() })
+    const leaveObj = { ...leave.toObject(), id: leave._id.toString() }
+
+    if (departmentManager) {
+      try {
+        await sendLeaveRequestEmail(leaveObj)
+      } catch (emailError) {
+        console.error('Failed to send leave request email', emailError)
+        return res.status(201).json({ ...leaveObj, emailSent: false, emailError: emailError.message })
+      }
+    }
+
+    return res.status(201).json({ ...leaveObj, emailSent: true })
   } catch (error) {
     console.error('Failed to create leave request', error)
     return res.status(500).json({ error: 'Failed to create leave request' })

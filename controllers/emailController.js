@@ -364,3 +364,40 @@ Submitted By:     ${submittedBy || ''}
 
   return info
 }
+
+export const sendLeaveStatusEmail = async (leave, status) => {
+  const { employeeName, department, leaveType, startDate, endDate, reason, submittedBy } = leave
+
+  if (!submittedBy) {
+    throw new Error('Submitter email is required to send leave status email')
+  }
+
+  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER
+  if (!fromEmail) {
+    throw new Error('FROM email is not configured')
+  }
+
+  const text = `LEAVE REQUEST ${String(status).toUpperCase()}
+
+Employee Name:    ${employeeName || ''}
+Department:       ${department || ''}
+Leave Type:       ${leaveType || ''}
+Start Date:       ${startDate || ''}
+End Date:         ${endDate || ''}
+
+Reason:
+${reason || ''}
+
+Submitted By:     ${submittedBy || ''}
+Status:           ${status}
+`
+
+  const info = await sendMail({
+    from: formatAddress(fromEmail, getDisplayName(fromEmail)),
+    to: formatAddress(submittedBy, employeeName),
+    subject: `Leave Request ${status}: ${employeeName || ''}`,
+    text,
+  })
+
+  return info
+}

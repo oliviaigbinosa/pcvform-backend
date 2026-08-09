@@ -1,7 +1,7 @@
 import LeaveRequest from '../models/LeaveRequest.js'
 import Admin from '../models/Admin.js'
 import User from '../models/User.js'
-import { sendLeaveRequestEmail } from '../controllers/emailController.js'
+import { sendLeaveRequestEmail, sendLeaveStatusEmail } from '../controllers/emailController.js'
 
 export const getLeaveRequests = async (req, res) => {
   try {
@@ -79,6 +79,15 @@ export const updateLeaveRequestStatus = async (req, res) => {
     )
     if (!leave) {
       return res.status(404).json({ error: 'Leave request not found' })
+    }
+
+    const normalized = String(status).toLowerCase()
+    if (normalized === 'approved' || normalized === 'declined') {
+      try {
+        await sendLeaveStatusEmail(leave.toObject(), leave.status)
+      } catch (emailError) {
+        console.error('Failed to send leave status email', emailError)
+      }
     }
 
     return res.json({ ...leave.toObject(), id: leave._id.toString() })

@@ -13,6 +13,8 @@ services:
         value: onboarding@resend.dev
       - key: TEST_RECIPIENT
         sync: false
+      - key: RESEND_DOMAIN_VERIFIED
+        value: false
       - key: MONGODB_URI
         sync: false
       - key: ADMIN_EMAIL

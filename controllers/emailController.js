@@ -51,7 +51,9 @@ async function sendMail(mailOptions) {
 
     const fromEmail =
       String(mailOptions.from).match(/<([^>]+)>/)?.[1] || mailOptions.from
-    if (fromEmail.toLowerCase().endsWith('@resend.dev')) {
+    const resendDomainVerified =
+      String(process.env.RESEND_DOMAIN_VERIFIED || '').toLowerCase() === 'true'
+    if (fromEmail.toLowerCase().endsWith('@resend.dev') || !resendDomainVerified) {
       const testTo = process.env.TEST_RECIPIENT || 'delivered@resend.dev'
       const rawTo = Array.isArray(mailOptions.to)
         ? mailOptions.to[0]

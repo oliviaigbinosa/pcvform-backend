@@ -63,3 +63,27 @@ export const createLeaveRequest = async (req, res) => {
     return res.status(500).json({ error: 'Failed to create leave request' })
   }
 }
+
+export const updateLeaveRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status } = req.body
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' })
+    }
+
+    const leave = await LeaveRequest.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true },
+    )
+    if (!leave) {
+      return res.status(404).json({ error: 'Leave request not found' })
+    }
+
+    return res.json({ ...leave.toObject(), id: leave._id.toString() })
+  } catch (error) {
+    console.error('Failed to update leave request status', error)
+    return res.status(500).json({ error: 'Failed to update leave request status' })
+  }
+}

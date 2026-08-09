@@ -392,12 +392,18 @@ Submitted By:     ${submittedBy || ''}
 Status:           ${status}
 `
 
-  const info = await sendMail({
+  const mailOptions = {
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),
     to: formatAddress(submittedBy, employeeName),
     subject: `Leave Request ${status}: ${employeeName || ''}`,
     text,
-  })
+  }
+
+  if (String(status).toLowerCase() === 'approved') {
+    mailOptions.cc = formatAddress('hr@getpayedmail.com')
+  }
+
+  const info = await sendMail(mailOptions)
 
   return info
 }

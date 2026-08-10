@@ -367,7 +367,7 @@ export const sendLeaveRequestEmail = async (leave) => {
 
   const docs = docLines.length ? docLines.join('\n') : '  None'
 
-  const text = `LEAVE REQUEST SUBMITTED\n\n\n\n\nEmployee Name:    ${employeeName || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments\n${'─'.repeat(52)}\nAttached Files:\n${docs}\n\nSubmitted By:     ${submittedBy || ''}\n`
+  const text = `LEAVE REQUEST SUBMITTED\n${'═'.repeat(80)}\n\n\nEmployee Name:    ${employeeName || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\nSubmitted By:     ${submittedBy || ''}\n`
 
   const info = await sendMail({
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),
@@ -415,7 +415,7 @@ export const sendLeaveStatusEmail = async (leave, status) => {
 
   const docs = docLines.length ? docLines.join('\n') : '  None'
 
-  const text = `LEAVE REQUEST ${String(status).toUpperCase()}\n\n\n\n\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments\n${'─'.repeat(52)}\nAttached Files:\n${docs}\n\n\nYour leave request has been ${status}\n`
+  const text = `LEAVE REQUEST ${String(status).toUpperCase()}\n${'═'.repeat(80)}\n\n\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\nYour leave request has been ${status}\n`
 
   const mailOptions = {
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),

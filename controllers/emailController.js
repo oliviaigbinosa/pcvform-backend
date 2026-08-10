@@ -462,20 +462,25 @@ export const sendLeaveStatusEmail = async (leave, status) => {
   <p style="margin: 24px 0 16px 0; font-size: 16px;"><em style="font-size: 16px;">Your leave request has been ${escapeHtml(status)}</em></p>
 </div>`
 
-  const mailOptions = {
+  const info = await sendMail({
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),
     to: formatAddress(email),
     subject: `New Leave Request`,
     text,
     html,
     attachments: emailAttachments,
-  }
+  })
 
   if (String(status).toLowerCase() === 'approved') {
-    mailOptions.cc = formatAddress('hr@getpayedmail.com')
+    await sendMail({
+      from: formatAddress(fromEmail, getDisplayName(fromEmail)),
+      to: formatAddress('hr@getpayedmail.com'),
+      subject: `New Leave Request`,
+      text,
+      html,
+      attachments: emailAttachments,
+    })
   }
-
-  const info = await sendMail(mailOptions)
 
   return info
 }

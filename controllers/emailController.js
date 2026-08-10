@@ -379,8 +379,8 @@ export const sendLeaveRequestEmail = async (leave) => {
 
   const text = `${heading}\n${'═'.repeat(52)}\nEmployee Name:    ${employeeName || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\nSubmitted By:     ${submittedBy || ''}\n`
 
-  const html = `<div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
-  <h1 style="font-size: 22px; margin: 0 0 8px 0; padding-bottom: 8px; border-bottom: 4px double #000;">${escapeHtml(heading)}</h1>
+  const html = `<div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.5; color: #333;">
+  <h1 style="font-size: 19px; margin: 0 0 8px 0; padding-bottom: 8px; border-bottom: 4px double #000;">${escapeHtml(heading)}</h1>
   <p style="margin: 4px 0;"><strong>Employee Name:</strong> ${escapeHtml(employeeName)}</p>
   <p style="margin: 4px 0;"><strong>Department:</strong> ${escapeHtml(department)}</p>
   <p style="margin: 4px 0;"><strong>Leave Type:</strong> ${escapeHtml(leaveType)}</p>
@@ -444,8 +444,8 @@ export const sendLeaveStatusEmail = async (leave, status) => {
 
   const text = `${heading}\n${'═'.repeat(52)}\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\nYour leave request has been ${status}\n`
 
-  const html = `<div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
-  <h1 style="font-size: 22px; margin: 0 0 8px 0; padding-bottom: 8px; border-bottom: 4px double #000;">${escapeHtml(heading)}</h1>
+  const html = `<div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.5; color: #333;">
+  <h1 style="font-size: 19px; margin: 0 0 8px 0; padding-bottom: 8px; border-bottom: 4px double #000;">${escapeHtml(heading)}</h1>
   <p style="margin: 4px 0;"><strong>Employee Name:</strong> ${escapeHtml(employeeName)}</p>
   <p style="margin: 4px 0;"><strong>Email:</strong> ${escapeHtml(email)}</p>
   <p style="margin: 4px 0;"><strong>Department:</strong> ${escapeHtml(department)}</p>

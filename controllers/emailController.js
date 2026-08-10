@@ -345,6 +345,7 @@ export const sendLeaveRequestEmail = async (leave) => {
 
   const text = `LEAVE REQUEST SUBMITTED
 
+
 Employee Name:    ${employeeName || ''}
 Department:       ${department || ''}
 Leave Type:       ${leaveType || ''}
@@ -359,8 +360,8 @@ Submitted By:     ${submittedBy || ''}
 
   const info = await sendMail({
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),
-    to: formatAddress(departmentManager, employeeName),
-    subject: `Leave Request: ${employeeName || ''}`,
+    to: formatAddress(departmentManager),
+    subject: `New Leave Request`,
     text,
   })
 
@@ -368,9 +369,9 @@ Submitted By:     ${submittedBy || ''}
 }
 
 export const sendLeaveStatusEmail = async (leave, status) => {
-  const { employeeName, department, leaveType, startDate, endDate, reason, submittedBy } = leave
+  const { employeeName, submittedBy: email, department, leaveType, startDate, endDate, reason } = leave
 
-  if (!submittedBy) {
+  if (!email) {
     throw new Error('Submitter email is required to send leave status email')
   }
 
@@ -380,8 +381,10 @@ export const sendLeaveStatusEmail = async (leave, status) => {
   }
 
   const text = `LEAVE REQUEST ${String(status).toUpperCase()}
+  
 
 Employee Name:    ${employeeName || ''}
+Email:            ${email || ''}
 Department:       ${department || ''}
 Leave Type:       ${leaveType || ''}
 Start Date:       ${startDate || ''}
@@ -390,14 +393,14 @@ End Date:         ${endDate || ''}
 Reason:
 ${reason || ''}
 
-Submitted By:     ${submittedBy || ''}
-Status:           ${status}
+
+Your leave request has been ${status}
 `
 
   const mailOptions = {
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),
-    to: formatAddress(submittedBy, employeeName),
-    subject: `Leave Request ${status}: ${employeeName || ''}`,
+    to: formatAddress(email),
+    subject: `New Leave Request`,
     text,
   }
 

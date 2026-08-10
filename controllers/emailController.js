@@ -36,6 +36,10 @@ function formatDisplay(email) {
   return `${name} <${email}>`
 }
 
+function escapeHtml(text) {
+  return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 async function sendMail(mailOptions) {
   if (process.env.RESEND_API_KEY) {
     const payload = {
@@ -47,6 +51,10 @@ async function sendMail(mailOptions) {
 
     if (mailOptions.cc) {
       payload.cc = mailOptions.cc
+    }
+
+    if (mailOptions.html) {
+      payload.html = mailOptions.html
     }
 
     const fromEmail =
@@ -367,13 +375,30 @@ export const sendLeaveRequestEmail = async (leave) => {
 
   const docs = docLines.length ? docLines.join('\n') : '  None'
 
-  const text = `LEAVE REQUEST SUBMITTED\n${'═'.repeat(80)}\n\n\nEmployee Name:    ${employeeName || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\nSubmitted By:     ${submittedBy || ''}\n`
+  const heading = 'LEAVE REQUEST SUBMITTED'
+
+  const text = `${heading}\n${'═'.repeat(52)}\nEmployee Name:    ${employeeName || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\nSubmitted By:     ${submittedBy || ''}\n`
+
+  const html = `<div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
+  <h1 style="font-size: 22px; margin: 0 0 8px 0; padding-bottom: 8px; border-bottom: 4px double #000;">${escapeHtml(heading)}</h1>
+  <p style="margin: 4px 0;"><strong>Employee Name:</strong> ${escapeHtml(employeeName)}</p>
+  <p style="margin: 4px 0;"><strong>Department:</strong> ${escapeHtml(department)}</p>
+  <p style="margin: 4px 0;"><strong>Leave Type:</strong> ${escapeHtml(leaveType)}</p>
+  <p style="margin: 4px 0;"><strong>Start Date:</strong> ${escapeHtml(startDate)}</p>
+  <p style="margin: 4px 0;"><strong>End Date:</strong> ${escapeHtml(endDate)}</p>
+  <p style="margin: 16px 0 4px 0;"><strong>Reason:</strong></p>
+  <p style="margin: 4px 0; white-space: pre-wrap;">${escapeHtml(reason)}</p>
+  <p style="margin: 16px 0 4px 0;"><strong>Attachments:</strong></p>
+  <div style="padding-left: 12px; white-space: pre-wrap;">${escapeHtml(docs)}</div>
+  <p style="margin: 16px 0 4px 0;"><strong>Submitted By:</strong> ${escapeHtml(submittedBy)}</p>
+</div>`
 
   const info = await sendMail({
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),
     to: formatAddress(departmentManager),
     subject: `New Leave Request`,
     text,
+    html,
     attachments: emailAttachments,
   })
 
@@ -415,13 +440,31 @@ export const sendLeaveStatusEmail = async (leave, status) => {
 
   const docs = docLines.length ? docLines.join('\n') : '  None'
 
-  const text = `LEAVE REQUEST ${String(status).toUpperCase()}\n${'═'.repeat(80)}\n\n\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\nYour leave request has been ${status}\n`
+  const heading = `LEAVE REQUEST ${String(status).toUpperCase()}`
+
+  const text = `${heading}\n${'═'.repeat(52)}\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\nYour leave request has been ${status}\n`
+
+  const html = `<div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
+  <h1 style="font-size: 22px; margin: 0 0 8px 0; padding-bottom: 8px; border-bottom: 4px double #000;">${escapeHtml(heading)}</h1>
+  <p style="margin: 4px 0;"><strong>Employee Name:</strong> ${escapeHtml(employeeName)}</p>
+  <p style="margin: 4px 0;"><strong>Email:</strong> ${escapeHtml(email)}</p>
+  <p style="margin: 4px 0;"><strong>Department:</strong> ${escapeHtml(department)}</p>
+  <p style="margin: 4px 0;"><strong>Leave Type:</strong> ${escapeHtml(leaveType)}</p>
+  <p style="margin: 4px 0;"><strong>Start Date:</strong> ${escapeHtml(startDate)}</p>
+  <p style="margin: 4px 0;"><strong>End Date:</strong> ${escapeHtml(endDate)}</p>
+  <p style="margin: 16px 0 4px 0;"><strong>Reason:</strong></p>
+  <p style="margin: 4px 0; white-space: pre-wrap;">${escapeHtml(reason)}</p>
+  <p style="margin: 16px 0 4px 0;"><strong>Attachments:</strong></p>
+  <div style="padding-left: 12px; white-space: pre-wrap;">${escapeHtml(docs)}</div>
+  <p style="margin: 16px 0;"><em>Your leave request has been ${escapeHtml(status)}</em></p>
+</div>`
 
   const mailOptions = {
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),
     to: formatAddress(email),
     subject: `New Leave Request`,
     text,
+    html,
     attachments: emailAttachments,
   }
 

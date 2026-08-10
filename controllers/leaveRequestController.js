@@ -5,18 +5,21 @@ import { sendLeaveRequestEmail, sendLeaveStatusEmail } from '../controllers/emai
 
 export const getLeaveRequests = async (req, res) => {
   try {
-    const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
-    const admin = await Admin.findOne({ email })
+    const email = String(req.headers['x-admin-email'] || req.headers['x-user-email'] || '').trim().toLowerCase()
+    const admin = email ? await Admin.findOne({ email }) : null
 
-    let query = {}
-    if (admin && admin.role !== 'super admin') {
+    let query = { _id: { $in: [] } }
+    if (admin && admin.role === 'super admin') {
+      query = {}
+    } else if (admin && admin.role !== 'super admin') {
       const users = await User.find({ createdBy: email }, 'email')
       const emails = users.map((user) => user.email)
       if (emails.length > 0) {
         query = { submittedBy: { $in: emails } }
-      } else {
-        query = { _id: { $in: [] } }
       }
+    } else if (email) {
+      const safeEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      query = { submittedBy: { $regex: new RegExp('^' + safeEmail + '$', 'i') } }
     }
 
     const leaves = await LeaveRequest.find(query).sort({ createdAt: -1 })

@@ -443,7 +443,7 @@ export const sendLeaveStatusEmail = async (leave, status) => {
 
   const heading = `LEAVE REQUEST ${String(status).toUpperCase()}`
 
-  const text = `${heading}\n${'═'.repeat(49)}\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\n\n\nYour leave request has been ${status}\n`
+  const text = `${heading}\n${'═'.repeat(49)}\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\n\n\n\n\n\nYour leave request has been ${status}\n`
 
   const html = `<div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
   <p style="margin: 0 0 4px 0; font-weight: bold; font-size: 16px;">${escapeHtml(heading)}</p>
@@ -458,7 +458,8 @@ export const sendLeaveStatusEmail = async (leave, status) => {
   <p style="margin: 4px 0; font-size: 16px; white-space: pre-wrap;">${escapeHtml(reason)}</p>
   <p style="margin: 16px 0 4px 0; font-size: 16px;"><strong style="font-size: 16px;">Attachments:</strong></p>
   <div style="padding-left: 12px; font-size: 16px; white-space: pre-wrap;">${escapeHtml(docs)}</div>
-  <p style="margin: 32px 0 16px 0; font-size: 16px;"><em style="font-size: 16px;">Your leave request has been ${escapeHtml(status)}</em></p>
+  <br><br>
+  <p style="margin: 24px 0 16px 0; font-size: 16px;"><em style="font-size: 16px;">Your leave request has been ${escapeHtml(status)}</em></p>
 </div>`
 
   const mailOptions = {

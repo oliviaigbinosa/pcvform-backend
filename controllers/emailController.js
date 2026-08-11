@@ -40,7 +40,7 @@ function escapeHtml(text) {
   return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-async function sendMail(mailOptions) {
+export async function sendMail(mailOptions) {
   if (process.env.RESEND_API_KEY) {
     const payload = {
       from: mailOptions.from,

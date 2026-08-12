@@ -3,7 +3,7 @@ import User from '../models/User.js'
 import Admin from '../models/Admin.js'
 
 function isUserEmail(email) {
-  return /^[^\s@]+@(getpayedmail\.com|gmail\.com)$/.test(email)
+  return /^[^\s@]+@getpayedmail\.com$/.test(email)
 }
 
 function getCreatedAt(user) {
@@ -54,7 +54,7 @@ export const createUser = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase()
     if (!isUserEmail(normalizedEmail)) {
-      return res.status(400).json({ error: 'Email must be a @getpayedmail.com or @gmail.com address' })
+      return res.status(400).json({ error: 'Email must be a @getpayedmail.com address' })
     }
 
     const isAdmin = role === 'admin'

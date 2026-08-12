@@ -1,4 +1,3 @@
-import nodemailer from 'nodemailer'
 
 function isGetPayedMailEmail(email) {
   return /^[^\s@]+@getpayedmail\.com$/.test(email)
@@ -9,7 +8,6 @@ const resendTestMode = String(process.env.RESEND_FROM || '').toLowerCase().endsW
 function isAllowedRecipient(email) {
   return (
     isGetPayedMailEmail(email) ||
-    String(email).toLowerCase() === 'igbinosaolivia6@gmail.com' ||
     (resendTestMode && /^[^\s@]+@resend\.dev$/.test(email))
   )
 }
@@ -107,17 +105,7 @@ export async function sendMail(mailOptions) {
     return { messageId: data.id }
   }
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth:
-      process.env.SMTP_USER && process.env.SMTP_PASS
-        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-        : undefined,
-  })
-
-  return transporter.sendMail(mailOptions)
+  throw new Error('RESEND_API_KEY is not configured')
 }
 
 export const sendInviteEmail = async (req, res) => {
@@ -128,13 +116,12 @@ export const sendInviteEmail = async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    // Validate that to email is @getpayedmail.com or @gmail.com
-    if (!isAllowedRecipient(to) && !String(to).toLowerCase().endsWith('@gmail.com')) {
-      return res.status(400).json({ error: 'To email must be a @getpayedmail.com, @gmail.com, or @resend.dev address' })
+    if (!isAllowedRecipient(to)) {
+      return res.status(400).json({ error: 'To email must be a @getpayedmail.com or @resend.dev address' })
     }
 
     // Set from email to use @getpayedmail.com domain
-    const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER
+    const fromEmail = process.env.RESEND_FROM
     if (!fromEmail) {
       return res.status(500).json({ error: 'FROM email is not configured' })
     }
@@ -186,7 +173,7 @@ export const sendApprovedCcEmail = async (req, res) => {
       return res.status(400).json({ error: 'CC email must be a @getpayedmail.com or @resend.dev address' })
     }
 
-    const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER
+    const fromEmail = process.env.RESEND_FROM
     if (!fromEmail) {
       return res.status(500).json({ error: 'FROM email is not configured' })
     }
@@ -269,7 +256,7 @@ export const sendVoucherEmail = async (req, res) => {
       return res.status(400).json({ error: 'To email must be a @getpayedmail.com or @resend.dev address' })
     }
 
-    const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER
+    const fromEmail = process.env.RESEND_FROM
     if (!fromEmail) {
       return res.status(500).json({ error: 'FROM email is not configured' })
     }
@@ -347,7 +334,7 @@ export const sendLeaveRequestEmail = async (leave) => {
     throw new Error('Department manager email is required to send leave request email')
   }
 
-  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER
+  const fromEmail = process.env.RESEND_FROM
   if (!fromEmail) {
     throw new Error('FROM email is not configured')
   }
@@ -413,7 +400,7 @@ export const sendLeaveStatusEmail = async (leave, status) => {
     throw new Error('Submitter email is required to send leave status email')
   }
 
-  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER
+  const fromEmail = process.env.RESEND_FROM
   if (!fromEmail) {
     throw new Error('FROM email is not configured')
   }

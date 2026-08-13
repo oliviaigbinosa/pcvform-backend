@@ -18,8 +18,16 @@ export const getVouchers = async (req, res) => {
       }
     }
 
-    const vouchers = await Voucher.find(query).sort({ createdAt: -1 })
-    return res.json(vouchers)
+    const [vouchers, admins] = await Promise.all([
+      Voucher.find(query).sort({ createdAt: -1 }).lean(),
+      Admin.find({}, 'email').lean(),
+    ])
+    const adminEmails = new Set(admins.map((a) => a.email.toLowerCase()))
+    const result = vouchers.map((voucher) => ({
+      ...voucher,
+      submitterIsAdmin: adminEmails.has(String(voucher.submittedBy || voucher.from).toLowerCase()),
+    }))
+    return res.json(result)
   } catch (error) {
     console.error('Failed to list vouchers', error)
     return res.status(500).json({ error: 'Failed to list vouchers' })
@@ -39,7 +47,12 @@ export const createVoucher = async (req, res) => {
     }
 
     const voucher = await Voucher.create(req.body)
-    return res.status(201).json(voucher)
+    const admin = await Admin.findOne({
+      email: String(req.body.submittedBy || req.body.from).toLowerCase(),
+    }).lean()
+    const result = voucher.toObject()
+    result.submitterIsAdmin = Boolean(admin)
+    return res.status(201).json(result)
   } catch (error) {
     console.error('Failed to create voucher', error)
     return res.status(500).json({ error: 'Failed to create voucher' })
@@ -74,7 +87,12 @@ export const updateVoucherStatus = async (req, res) => {
       return res.status(404).json({ error: 'Voucher not found' })
     }
 
-    return res.json(voucher)
+    const admin = await Admin.findOne({
+      email: String(voucher.submittedBy || voucher.from).toLowerCase(),
+    }).lean()
+    const result = voucher.toObject()
+    result.submitterIsAdmin = Boolean(admin)
+    return res.json(result)
   } catch (error) {
     console.error('Failed to update voucher status', error)
     return res.status(500).json({ error: 'Failed to update voucher status' })

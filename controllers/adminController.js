@@ -13,8 +13,12 @@ function getCreatedAt(user) {
 export const listUsers = async (req, res) => {
   try {
     const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
-    const requestingAdmin = await Admin.findOne({ email }, '-password')
-    const isSuper = requestingAdmin?.role === 'super admin'
+    const [requestingAdmin, requestingUser] = await Promise.all([
+      Admin.findOne({ email }, '-password'),
+      User.findOne({ email }, '-password'),
+    ])
+    const isSuper =
+      requestingAdmin?.role === 'super admin' || requestingUser?.role === 'super admin'
 
     let users = []
     let admins = []
@@ -57,10 +61,15 @@ export const createUser = async (req, res) => {
       return res.status(400).json({ error: 'Email must be a @getpayedmail.com address' })
     }
 
-    const isAdmin = role === 'admin'
+    const isAdmin = role === 'admin' || role === 'super admin'
     if (isAdmin) {
-      const admin = await Admin.findOne({ email: creator })
-      if (!admin || admin.role !== 'super admin') {
+      const [creatorAdmin, creatorUser] = await Promise.all([
+        Admin.findOne({ email: creator }),
+        User.findOne({ email: creator }),
+      ])
+      const isSuper =
+        creatorAdmin?.role === 'super admin' || creatorUser?.role === 'super admin'
+      if (!isSuper) {
         return res.status(403).json({ error: 'Only super admins can create admin accounts' })
       }
     }
@@ -76,6 +85,7 @@ export const createUser = async (req, res) => {
     const user = await Model.create({
       email: normalizedEmail,
       password: hashed,
+      role: isAdmin ? role : undefined,
       department: department || undefined,
       createdBy: creator || createdBy || undefined,
     })
@@ -100,11 +110,15 @@ export const deleteUser = async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    const requester = await Admin.findOne({ email: requesterEmail })
-    if (!requester) {
+    const [requesterAdmin, requesterUser] = await Promise.all([
+      Admin.findOne({ email: requesterEmail }),
+      User.findOne({ email: requesterEmail }),
+    ])
+    if (!requesterAdmin && !requesterUser) {
       return res.status(403).json({ error: 'Forbidden' })
     }
-    const isSuper = requester.role === 'super admin'
+    const isSuper =
+      requesterAdmin?.role === 'super admin' || requesterUser?.role === 'super admin'
 
     let user = await User.findById(req.params.id)
     if (!user) {

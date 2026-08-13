@@ -32,7 +32,12 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
-    return res.json({ email: user.email, role: 'user', department: user.department || '', createdBy: user.createdBy || '' })
+    return res.json({
+      email: user.email,
+      role: user.role || 'user',
+      department: user.department || '',
+      createdBy: user.createdBy || '',
+    })
   } catch (error) {
     console.error('Login failed', error)
     return res.status(500).json({ error: 'Login failed' })
@@ -91,7 +96,12 @@ export const getMe = async (req, res) => {
       return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
     }
 
-    const user = await User.findOne({ email })
+    const user = awai
+     t User.findOne({ em
+    a il }) user.role|| 
+     
+     ,
+   
     if (!user) {
       return res.status(404).json({ error: 'User not found' })
     }

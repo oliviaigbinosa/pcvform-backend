@@ -17,6 +17,7 @@ export const login = async (req, res) => {
     if (admin) {
       const valid = await bcrypt.compare(password, admin.password)
       if (!valid) {
+        console.log(`[login] Admin found for ${normalizedEmail} but password mismatch`)
         return res.status(401).json({ error: 'Invalid email or password' })
       }
       return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
@@ -24,11 +25,13 @@ export const login = async (req, res) => {
 
     const user = await User.findOne({ email: normalizedEmail })
     if (!user) {
+      console.log(`[login] No account found for ${normalizedEmail}`)
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
     const valid = await bcrypt.compare(password, user.password)
     if (!valid) {
+      console.log(`[login] User found for ${normalizedEmail} but password mismatch`)
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
@@ -96,17 +99,12 @@ export const getMe = async (req, res) => {
       return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
     }
 
-    const user = awai
-     t User.findOne({ em
-    a il }) user.role|| 
-     
-     ,
-   
+    const user = await User.findOne({ email })
     if (!user) {
       return res.status(404).json({ error: 'User not found' })
     }
 
-    return res.json({ email: user.email, role: 'user', department: user.department || '', createdBy: user.createdBy || '' })
+    return res.json({ email: user.email, role: user.role || 'user', department: user.department || '', createdBy: user.createdBy || '' })
   } catch (error) {
     console.error('Get me failed', error)
     return res.status(500).json({ error: 'Failed to fetch user' })

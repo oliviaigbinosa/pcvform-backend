@@ -51,7 +51,7 @@ export const listUsers = async (req, res) => {
 export const createUser = async (req, res) => {
   try {
     const { email, password, createdBy, department, role } = req.body
-    const creator = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const creator = String(req.headers['x-admin-email'] || req.body.createdBy || '').trim().toLowerCase()
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' })
     }

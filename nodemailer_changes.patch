@@ -1,0 +1,320 @@
+diff --git a/controllers/emailController.js b/controllers/emailController.js
+index 73ddcec..920fbb6 100644
+--- a/controllers/emailController.js
++++ b/controllers/emailController.js
+@@ -1,15 +1,12 @@
+ 
++import nodemailer from 'nodemailer'
++
+ function isGetPayedMailEmail(email) {
+   return /^[^\s@]+@getpayedmail\.com$/.test(email)
+ }
+ 
+-const resendTestMode = String(process.env.RESEND_FROM || '').toLowerCase().endsWith('@resend.dev')
+-
+ function isAllowedRecipient(email) {
+-  return (
+-    isGetPayedMailEmail(email) ||
+-    (resendTestMode && /^[^\s@]+@resend\.dev$/.test(email))
+-  )
++  return isGetPayedMailEmail(email)
+ }
+ 
+ function getDisplayName(email) {
+@@ -23,7 +20,6 @@ function getDisplayName(email) {
+ 
+ function formatAddress(email, name) {
+   if (!email) return email
+-  if (String(email).toLowerCase().endsWith('@resend.dev')) return email
+   const displayName = name || getDisplayName(email)
+   return displayName ? `${displayName} <${email}>` : email
+ }
+@@ -38,74 +34,41 @@ function escapeHtml(text) {
+   return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+ }
+ 
+-export async function sendMail(mailOptions) {
+-  if (process.env.RESEND_API_KEY) {
+-    const payload = {
+-      from: mailOptions.from,
+-      to: mailOptions.to,
+-      subject: mailOptions.subject,
+-      text: mailOptions.text,
+-    }
+-
+-    if (mailOptions.cc) {
+-      payload.cc = mailOptions.cc
+-    }
+-
+-    if (mailOptions.html) {
+-      payload.html = mailOptions.html
+-    }
++const transporter = nodemailer.createTransport({
++  host: process.env.SMTP_HOST,
++  port: Number(process.env.SMTP_PORT) || 587,
++  secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true',
++  auth: {
++    user: process.env.SMTP_USER,
++    pass: process.env.SMTP_PASS,
++  },
++})
+ 
+-    const fromEmail =
+-      String(mailOptions.from).match(/<([^>]+)>/)?.[1] || mailOptions.from
+-    const resendDomainVerified =
+-      String(process.env.RESEND_DOMAIN_VERIFIED || '').toLowerCase() === 'true'
+-    if (fromEmail.toLowerCase().endsWith('@resend.dev') || !resendDomainVerified) {
+-      const testTo = process.env.TEST_RECIPIENT || 'delivered@resend.dev'
+-      const rawTo = Array.isArray(mailOptions.to)
+-        ? mailOptions.to[0]
+-        : mailOptions.to
+-      const toEmail =
+-        (String(rawTo).match(/<([^>]+)>/) || [])[1] || String(rawTo)
+-      const normalizedTo = toEmail.trim().toLowerCase()
+-      const normalizedTest = testTo.trim().toLowerCase()
+-      payload.to = normalizedTo === normalizedTest ? toEmail.trim() : testTo
+-      if (payload.cc) payload.cc = testTo
+-    }
+-
+-    if (mailOptions.replyTo) {
+-      const replyTo = String(mailOptions.replyTo)
+-      const match = replyTo.match(/<([^>]+)>/)
+-      payload.reply_to = match ? match[1] : replyTo
+-    }
++export async function sendMail(mailOptions) {
++  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
++    throw new Error('SMTP credentials are not configured')
++  }
+ 
+-    if (mailOptions.attachments && mailOptions.attachments.length) {
+-      payload.attachments = mailOptions.attachments.map((att) => ({
++  const attachments = mailOptions.attachments?.length
++    ? mailOptions.attachments.map((att) => ({
+         filename: att.filename,
+-        content: Buffer.isBuffer(att.content)
+-          ? att.content.toString('base64')
+-          : att.content,
+-        content_type: att.contentType,
++        content: att.content,
++        contentType: att.contentType,
+       }))
+-    }
+-
+-    const res = await fetch('https://api.resend.com/emails', {
+-      method: 'POST',
+-      headers: {
+-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+-        'Content-Type': 'application/json',
+-      },
+-      body: JSON.stringify(payload),
+-    })
+-
+-    const data = await res.json()
+-    if (!res.ok) {
+-      throw new Error(data?.message || `Resend API error ${res.status}`)
+-    }
+-
+-    return { messageId: data.id }
+-  }
++    : undefined
++
++  const info = await transporter.sendMail({
++    from: mailOptions.from,
++    to: mailOptions.to,
++    cc: mailOptions.cc,
++    replyTo: mailOptions.replyTo,
++    subject: mailOptions.subject,
++    text: mailOptions.text,
++    html: mailOptions.html,
++    attachments,
++  })
+ 
+-  throw new Error('RESEND_API_KEY is not configured')
++  return { messageId: info.messageId }
+ }
+ 
+ export const sendInviteEmail = async (req, res) => {
+@@ -117,18 +80,14 @@ export const sendInviteEmail = async (req, res) => {
+     }
+ 
+     if (!isAllowedRecipient(to)) {
+-      return res.status(400).json({ error: 'To email must be a @getpayedmail.com or @resend.dev address' })
++      return res.status(400).json({ error: 'To email must be a @getpayedmail.com address' })
+     }
+ 
+     // Set from email to use @getpayedmail.com domain
+-    const fromEmail = process.env.RESEND_FROM
+-    if (!fromEmail) {
+-      return res.status(500).json({ error: 'FROM email is not configured' })
+-    }
+-
+-    if (!process.env.RESEND_API_KEY && !isGetPayedMailEmail(fromEmail)) {
+-      return res.status(500).json({ error: 'FROM email must be a @getpayedmail.com address' })
++    if (!isGetPayedMailEmail(senderEmail)) {
++      return res.status(400).json({ error: 'From email must be a @getpayedmail.com address' })
+     }
++    const fromEmail = senderEmail
+ 
+     const subject = 'Welcome to Getpayed Petty Cash Voucher System'
+     const text = `You have been invited to join the Getpayed Petty Cash Voucher System.
+@@ -144,7 +103,7 @@ Please log in and change your password after your first login.
+ 
+ If you have any questions, please contact your administrator.`
+ 
+-    const displayName = senderEmail ? getDisplayName(senderEmail) : getDisplayName(fromEmail)
++    const displayName = getDisplayName(senderEmail)
+ 
+     const info = await sendMail({
+       from: formatAddress(fromEmail, displayName),
+@@ -170,17 +129,13 @@ export const sendApprovedCcEmail = async (req, res) => {
+     }
+ 
+     if (!isAllowedRecipient(cc)) {
+-      return res.status(400).json({ error: 'CC email must be a @getpayedmail.com or @resend.dev address' })
+-    }
+-
+-    const fromEmail = process.env.RESEND_FROM
+-    if (!fromEmail) {
+-      return res.status(500).json({ error: 'FROM email is not configured' })
++      return res.status(400).json({ error: 'CC email must be a @getpayedmail.com address' })
+     }
+ 
+-    if (!process.env.RESEND_API_KEY && !isGetPayedMailEmail(fromEmail)) {
+-      return res.status(500).json({ error: 'FROM email must be a @getpayedmail.com address' })
++    if (!isGetPayedMailEmail(from)) {
++      return res.status(400).json({ error: 'From email must be a @getpayedmail.com address' })
+     }
++    const fromEmail = from
+ 
+     const formattedAmount = Number(amount || 0).toLocaleString('en-US', {
+       minimumFractionDigits: 2,
+@@ -213,10 +168,11 @@ export const sendApprovedCcEmail = async (req, res) => {
+     const text = `PETTY CASH VOUCHER APPROVED\n${'═'.repeat(52)}\nVoucher No.:      ${voucherNo}\nCompany:          Getpayed Technology Solutions Ltd.\nSubmitted By:     ${submittedBy || from}\n\nEMAIL DETAILS\n${'─'.repeat(52)}\nFrom:             ${formatDisplay(from)}\nTo:               ${formatDisplay(to)}\nCC:               ${formatDisplay(cc)}\nSubject:          ${subject}\n\nPAYEE INFORMATION\n${'─'.repeat(52)}\nPayee:            ${payee || ''}\nDepartment:       ${department || ''}\n\nAMOUNT & PURPOSE\n${'─'.repeat(52)}\nAmount (Figures): ₦${formattedAmount}\n\nPurpose / Description:\n${purpose || ''}\n\nSUPPORTING DOCUMENTS\n${'─'.repeat(52)}\nSubmission Date:  ${submissionDate}\nAttached Files:\n${docs}\n\n${'═'.repeat(52)}\nThis voucher has been approved.`
+ 
+     const displayName = getDisplayName(from)
++    const replyToName = getDisplayName(from)
+ 
+     const info = await sendMail({
+       from: formatAddress(fromEmail, displayName),
+-      replyTo: formatAddress(from, displayName),
++      replyTo: formatAddress(from, replyToName),
+       to: formatAddress(cc),
+       subject: `Approved: ${subject || `Petty Cash Voucher ${voucherNo}`}`,
+       text,
+@@ -253,17 +209,13 @@ export const sendVoucherEmail = async (req, res) => {
+     }
+ 
+     if (!isAllowedRecipient(to)) {
+-      return res.status(400).json({ error: 'To email must be a @getpayedmail.com or @resend.dev address' })
++      return res.status(400).json({ error: 'To email must be a @getpayedmail.com address' })
+     }
+ 
+-    const fromEmail = process.env.RESEND_FROM
+-    if (!fromEmail) {
+-      return res.status(500).json({ error: 'FROM email is not configured' })
+-    }
+-
+-    if (!process.env.RESEND_API_KEY && !isGetPayedMailEmail(fromEmail)) {
+-      return res.status(500).json({ error: 'FROM email must be a @getpayedmail.com address' })
++    if (!isGetPayedMailEmail(from)) {
++      return res.status(400).json({ error: 'From email must be a @getpayedmail.com address' })
+     }
++    const fromEmail = from
+ 
+     const formattedAmount = Number(amount || 0).toLocaleString('en-US', {
+       minimumFractionDigits: 2,
+@@ -296,10 +248,11 @@ export const sendVoucherEmail = async (req, res) => {
+     const text = `PETTY CASH VOUCHER\n${'═'.repeat(52)}\nVoucher No.:      ${voucherNo}\nCompany:          Getpayed Technology Solutions Ltd.\nSubmitted By:     ${submittedBy || from}\n\nEMAIL DETAILS\n${'─'.repeat(52)}\nFrom:             ${formatDisplay(from)}\nTo:               ${formatDisplay(to)}\nCC:               ${cc ? formatDisplay(cc) : ''}\nSubject:          ${subject}\n\nPAYEE INFORMATION\n${'─'.repeat(52)}\nPayee:            ${payee}\nDepartment:       ${department}\n\nAMOUNT & PURPOSE\n${'─'.repeat(52)}\nAmount (Figures): ₦${formattedAmount}\nAmount (Words):   ${amountWords || ''}\n\nPurpose / Description:\n${purpose || ''}\n\nSUPPORTING DOCUMENTS\n${'─'.repeat(52)}\nSubmission Date:  ${submissionDate}\nAttached Files:\n${docs}\n\n${'═'.repeat(52)}\nThis voucher was generated by the Petty Cash Voucher System.`
+ 
+     const displayName = getDisplayName(from)
++    const replyToName = getDisplayName(from)
+ 
+     const mailOptions = {
+       from: formatAddress(fromEmail, displayName),
+-      replyTo: formatAddress(from, displayName),
++      replyTo: formatAddress(from, replyToName),
+       to: formatAddress(to),
+       subject: `PCV: ${subject}`,
+       text,
+@@ -334,10 +287,11 @@ export const sendLeaveRequestEmail = async (leave) => {
+     throw new Error('Department manager email is required to send leave request email')
+   }
+ 
+-  const fromEmail = process.env.RESEND_FROM
+-  if (!fromEmail) {
+-    throw new Error('FROM email is not configured')
++  if (!isGetPayedMailEmail(submittedBy)) {
++    throw new Error('From email must be a @getpayedmail.com address')
+   }
++  const fromEmail = submittedBy
++  const displayName = employeeName || getDisplayName(submittedBy)
+ 
+   const emailAttachments = []
+   const docLines = []
+@@ -382,7 +336,7 @@ export const sendLeaveRequestEmail = async (leave) => {
+ </div>`
+ 
+   const info = await sendMail({
+-    from: formatAddress(fromEmail, getDisplayName(fromEmail)),
++    from: formatAddress(fromEmail, displayName),
+     to: formatAddress(departmentManager),
+     subject: `New Leave Request`,
+     text,
+@@ -393,17 +347,18 @@ export const sendLeaveRequestEmail = async (leave) => {
+   return info
+ }
+ 
+-export const sendLeaveStatusEmail = async (leave, status) => {
++export const sendLeaveStatusEmail = async (leave, status, approverEmail = '') => {
+   const { employeeName, submittedBy: email, department, leaveType, startDate, endDate, reason, attachments } = leave
+ 
+   if (!email) {
+     throw new Error('Submitter email is required to send leave status email')
+   }
+ 
+-  const fromEmail = process.env.RESEND_FROM
+-  if (!fromEmail) {
+-    throw new Error('FROM email is not configured')
++  if (!isGetPayedMailEmail(approverEmail)) {
++    throw new Error('From email must be a @getpayedmail.com address')
+   }
++  const fromEmail = approverEmail
++  const displayName = getDisplayName(approverEmail)
+ 
+   const emailAttachments = []
+   const docLines = []
+@@ -450,7 +405,7 @@ export const sendLeaveStatusEmail = async (leave, status) => {
+ </div>`
+ 
+   const info = await sendMail({
+-    from: formatAddress(fromEmail, getDisplayName(fromEmail)),
++    from: formatAddress(fromEmail, displayName),
+     to: formatAddress(email),
+     subject: `New Leave Request`,
+     text,
+@@ -460,7 +415,7 @@ export const sendLeaveStatusEmail = async (leave, status) => {
+ 
+   if (String(status).toLowerCase() === 'approved') {
+     await sendMail({
+-      from: formatAddress(fromEmail, getDisplayName(fromEmail)),
++      from: formatAddress(fromEmail, displayName),
+       to: formatAddress('hr@getpayedmail.com'),
+       subject: `New Leave Request`,
+       text,
+diff --git a/controllers/leaveRequestController.js b/controllers/leaveRequestController.js
+index 52efd0d..2afbbb9 100644
+--- a/controllers/leaveRequestController.js
++++ b/controllers/leaveRequestController.js
+@@ -84,10 +84,11 @@ export const updateLeaveRequestStatus = async (req, res) => {
+       return res.status(404).json({ error: 'Leave request not found' })
+     }
+ 
++    const approverEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase()
+     const normalized = String(status).toLowerCase()
+     if (normalized === 'approved' || normalized === 'declined') {
+       try {
+-        await sendLeaveStatusEmail(leave.toObject(), leave.status)
++        await sendLeaveStatusEmail(leave.toObject(), leave.status, approverEmail)
+       } catch (emailError) {
+         console.error('Failed to send leave status email', emailError)
+       }

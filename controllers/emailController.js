@@ -1,3 +1,5 @@
+import User from '../models/User.js'
+import Admin from '../models/Admin.js'
 
 function isGetPayedMailEmail(email) {
   return /^[^\s@]+@getpayedmail\.com$/.test(email)
@@ -111,13 +113,19 @@ export async function sendMail(mailOptions) {
 export const sendInviteEmail = async (req, res) => {
   try {
     const { to, password, from: senderEmail } = req.body
+    const toEmail = String(to).trim().toLowerCase()
 
-    if (!to || !password) {
+    if (!toEmail || !password) {
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    if (!isAllowedRecipient(to)) {
+    if (!isAllowedRecipient(toEmail)) {
       return res.status(400).json({ error: 'To email must be a @getpayedmail.com or @resend.dev address' })
+    }
+
+    const existingUser = await User.findOne({ email: toEmail }) || await Admin.findOne({ email: toEmail })
+    if (!existingUser) {
+      return res.status(400).json({ error: 'User not found in database. Invite failed' })
     }
 
     // Set from email to use @getpayedmail.com domain
@@ -134,7 +142,7 @@ export const sendInviteEmail = async (req, res) => {
     const text = `You have been invited to join the Getpayed Petty Cash Voucher System.
 
 Your login credentials:
-Email: ${to}
+Email: ${toEmail}
 Password: ${password}
 
 Click the link below to sign in:
@@ -149,7 +157,7 @@ If you have any questions, please contact your administrator.`
     const info = await sendMail({
       from: formatAddress(fromEmail, displayName),
       replyTo: senderEmail ? formatAddress(senderEmail) : undefined,
-      to: formatAddress(to),
+      to: formatAddress(toEmail),
       subject,
       text,
     })

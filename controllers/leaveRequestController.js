@@ -26,8 +26,16 @@ export const getLeaveRequests = async (req, res) => {
       query = { submittedBy: { $regex: new RegExp('^' + safeEmail + '$', 'i') } }
     }
 
-    const leaves = await LeaveRequest.find(query).sort({ createdAt: -1 })
-    return res.json(leaves.map((leave) => ({ ...leave.toObject(), id: leave._id.toString() })))
+    const [leaves, admins] = await Promise.all([
+      LeaveRequest.find(query).sort({ createdAt: -1 }),
+      Admin.find({}, 'email').lean(),
+    ])
+    const adminEmails = new Set(admins.map((a) => a.email.toLowerCase()))
+    return res.json(leaves.map((leave) => {
+      const obj = { ...leave.toObject(), id: leave._id.toString() }
+      obj.submitterIsAdmin = adminEmails.has(String(leave.submittedBy || '').toLowerCase())
+      return obj
+    }))
   } catch (error) {
     console.error('Failed to list leave requests', error)
     return res.status(500).json({ error: 'Failed to list leave requests' })
@@ -53,7 +61,11 @@ export const createLeaveRequest = async (req, res) => {
       submittedBy,
     })
 
+    const admin = await Admin.findOne({
+      email: String(submittedBy || '').toLowerCase(),
+    }).lean()
     const leaveObj = { ...leave.toObject(), id: leave._id.toString() }
+    leaveObj.submitterIsAdmin = Boolean(admin)
 
     if (departmentManager) {
       try {
@@ -88,6 +100,10 @@ export const updateLeaveRequestStatus = async (req, res) => {
       return res.status(404).json({ error: 'Leave request not found' })
     }
 
+    const admin = await Admin.findOne({
+      email: String(leave.submittedBy || '').toLowerCase(),
+    }).lean()
+
     const normalized = String(status).toLowerCase()
     if (normalized === 'approved' || normalized === 'declined') {
       try {
@@ -97,7 +113,9 @@ export const updateLeaveRequestStatus = async (req, res) => {
       }
     }
 
-    return res.json({ ...leave.toObject(), id: leave._id.toString() })
+    const result = { ...leave.toObject(), id: leave._id.toString() }
+    result.submitterIsAdmin = Boolean(admin)
+    return res.json(result)
   } catch (error) {
     console.error('Failed to update leave request status', error)
     return res.status(500).json({ error: 'Failed to update leave request status' })

@@ -17,7 +17,6 @@ export const login = async (req, res) => {
     if (admin) {
       const valid = await bcrypt.compare(password, admin.password)
       if (!valid) {
-        console.log(`[login] Admin found for ${normalizedEmail} but password mismatch`)
         return res.status(401).json({ error: 'Invalid email or password' })
       }
       return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
@@ -25,13 +24,11 @@ export const login = async (req, res) => {
 
     const user = await User.findOne({ email: normalizedEmail })
     if (!user) {
-      console.log(`[login] No account found for ${normalizedEmail}`)
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
     const valid = await bcrypt.compare(password, user.password)
     if (!valid) {
-      console.log(`[login] User found for ${normalizedEmail} but password mismatch`)
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 

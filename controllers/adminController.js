@@ -2,6 +2,10 @@ import bcrypt from 'bcryptjs'
 import User from '../models/User.js'
 import Admin from '../models/Admin.js'
 
+function isGetPayedMailEmail(email) {
+  return /^[^\s@]+@getpayedmail\.com$/.test(email)
+}
+
 function isUserEmail(email) {
   return /^[^\s@.]+\.[^\s@.]+(?:\.[^\s@.]+)*@getpayedmail\.com$/.test(email)
 }
@@ -57,11 +61,16 @@ export const createUser = async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    if (!isUserEmail(normalizedEmail)) {
-      return res.status(400).json({ error: 'Email must use a dot separator and be a @getpayedmail.com address' })
-    }
-
     const isAdmin = role === 'admin' || role === 'super admin'
+    if (role === 'super admin') {
+      if (!isGetPayedMailEmail(normalizedEmail)) {
+        return res.status(400).json({ error: 'Email must be a @getpayedmail.com address' })
+      }
+    } else {
+      if (!isUserEmail(normalizedEmail)) {
+        return res.status(400).json({ error: 'Email must use a dot separator and be a @getpayedmail.com address' })
+      }
+    }
     if (isAdmin) {
       const [creatorAdmin, creatorUser] = await Promise.all([
         Admin.findOne({ email: creator }),

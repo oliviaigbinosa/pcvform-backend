@@ -469,7 +469,7 @@ export const sendLeaveStatusEmail = async (leave, status) => {
   if (String(status).toLowerCase() === 'approved') {
     await sendMail({
       from: formatAddress(fromEmail, getDisplayName(fromEmail)),
-      to: formatAddress('hr@getpayedmail.com'),
+      to: formatAddress('chinenye.onyia@getpayedmail.com'),
       subject: `New Leave Request`,
       text,
       html,

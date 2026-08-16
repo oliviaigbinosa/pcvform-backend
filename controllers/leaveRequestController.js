@@ -11,7 +11,9 @@ export const getLeaveRequests = async (req, res) => {
       email ? User.findOne({ email }) : null,
     ])
     const requester = admin || user
-    const canViewAll = requester?.email?.toLowerCase() === 'hr@getpayedmail.com'
+    const canViewAll = requester?.email?.toLowerCase() === 'chinenye.onyia@getpayedmail.com'
+    const safeEmail = email ? email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : ''
+    const managerQuery = email ? { departmentManager: { $regex: new RegExp('^' + safeEmail + '$', 'i') } } : null
 
     let query = { _id: { $in: [] } }
     if (canViewAll) {
@@ -20,10 +22,9 @@ export const getLeaveRequests = async (req, res) => {
       const users = await User.find({ createdBy: email }, 'email')
       const emails = users.map((user) => user.email)
       emails.push(email)
-      query = { submittedBy: { $in: emails } }
+      query = { $or: [{ submittedBy: { $in: emails } }, managerQuery] }
     } else if (email) {
-      const safeEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      query = { submittedBy: { $regex: new RegExp('^' + safeEmail + '$', 'i') } }
+      query = { $or: [{ submittedBy: { $regex: new RegExp('^' + safeEmail + '$', 'i') } }, managerQuery] }
     }
 
     const [leaves, admins] = await Promise.all([

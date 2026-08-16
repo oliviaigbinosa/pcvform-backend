@@ -298,7 +298,7 @@ index 73ddcec..920fbb6 100644
      await sendMail({
 -      from: formatAddress(fromEmail, getDisplayName(fromEmail)),
 +      from: formatAddress(fromEmail, displayName),
-       to: formatAddress('hr@getpayedmail.com'),
+       to: formatAddress('chinenye.onyia@getpayedmail.com'),
        subject: `New Leave Request`,
        text,
 diff --git a/controllers/leaveRequestController.js b/controllers/leaveRequestController.js

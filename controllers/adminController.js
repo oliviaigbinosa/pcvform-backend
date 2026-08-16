@@ -3,7 +3,7 @@ import User from '../models/User.js'
 import Admin from '../models/Admin.js'
 
 function isUserEmail(email) {
-  return /^[^\s@]+@getpayedmail\.com$/.test(email)
+  return /^[^\s@.]+\.[^\s@.]+(?:\.[^\s@.]+)*@getpayedmail\.com$/.test(email)
 }
 
 function getCreatedAt(user) {
@@ -58,7 +58,7 @@ export const createUser = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase()
     if (!isUserEmail(normalizedEmail)) {
-      return res.status(400).json({ error: 'Email must be a @getpayedmail.com address' })
+      return res.status(400).json({ error: 'Email must use a dot separator and be a @getpayedmail.com address' })
     }
 
     const isAdmin = role === 'admin' || role === 'super admin'
@@ -100,6 +100,21 @@ export const createUser = async (req, res) => {
   } catch (error) {
     console.error('Failed to create user', error)
     return res.status(500).json({ error: 'Failed to create user' })
+  }
+}
+
+export const listUserEmails = async (req, res) => {
+  try {
+    const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const requester = await Admin.findOne({ email: requesterEmail })
+    if (!requester) {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    const users = await User.find({}, 'email').lean()
+    return res.json(users.map((user) => user.email.toLowerCase()))
+  } catch (error) {
+    console.error('Failed to list user emails', error)
+    return res.status(500).json({ error: 'Failed to list user emails' })
   }
 }
 

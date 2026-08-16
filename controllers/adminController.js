@@ -103,6 +103,21 @@ export const createUser = async (req, res) => {
   }
 }
 
+export const listAdminEmails = async (req, res) => {
+  try {
+    const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const requester = await Admin.findOne({ email: requesterEmail })
+    if (!requester) {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    const admins = await Admin.find({}, 'email').lean()
+    return res.json(admins.map((admin) => admin.email.toLowerCase()))
+  } catch (error) {
+    console.error('Failed to list admin emails', error)
+    return res.status(500).json({ error: 'Failed to list admin emails' })
+  }
+}
+
 export const deleteUser = async (req, res) => {
   try {
     const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()

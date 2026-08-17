@@ -62,22 +62,25 @@ export const createUser = async (req, res) => {
     if (!department) {
       return res.status(400).json({ error: 'Department is required' })
     }
-    if (!role) {
-      return res.status(400).json({ error: 'Role is required' })
-    }
 
     const normalizedEmail = email.trim().toLowerCase()
     const isAdmin = role === 'admin' || role === 'super admin'
-    if (isAdmin) {
-      const [creatorAdmin, creatorUser] = await Promise.all([
-        Admin.findOne({ email: creator }),
-        User.findOne({ email: creator }),
-      ])
-      const isSuper =
-        creatorAdmin?.role === 'super admin' || creatorUser?.role === 'super admin'
-      if (!isSuper) {
-        return res.status(403).json({ error: 'Only super admins can create admin accounts' })
-      }
+    
+    // Check if creator is super admin
+    const [creatorAdmin, creatorUser] = await Promise.all([
+      Admin.findOne({ email: creator }),
+      User.findOne({ email: creator }),
+    ])
+    const isSuper =
+      creatorAdmin?.role === 'super admin' || creatorUser?.role === 'super admin'
+    
+    // Only super admins need to provide role
+    if (isSuper && !role) {
+      return res.status(400).json({ error: 'Role is required' })
+    }
+    
+    if (isAdmin && !isSuper) {
+      return res.status(403).json({ error: 'Only super admins can create admin accounts' })
     }
 
     const existingUser = await User.findOne({ email: normalizedEmail })

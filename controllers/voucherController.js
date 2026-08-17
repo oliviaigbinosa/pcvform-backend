@@ -5,17 +5,38 @@ import User from '../models/User.js'
 export const getVouchers = async (req, res) => {
   try {
     const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
-    const admin = await Admin.findOne({ email })
+    if (!email) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+    const [admin, user] = await Promise.all([
+      Admin.findOne({ email }),
+      User.findOne({ email }),
+    ])
 
-    let query = {}
-    if (admin && admin.role !== 'super admin') {
-      const users = await User.find({ createdBy: email }, 'email')
-      const emails = users.map((user) => user.email)
-      if (emails.length > 0) {
-        query = { from: { $in: emails } }
+    let query
+    if (admin) {
+      if (admin.role === 'super admin') {
+        query = {}
       } else {
-        query = { _id: { $in: [] } }
+        const users = await User.find({ createdBy: email }, 'email')
+        const emails = users.map((u) => u.email)
+        if (emails.length > 0) {
+          query = { from: { $in: emails } }
+        } else {
+          query = { _id: { $in: [] } }
+        }
       }
+    } else if (user) {
+      query = {
+        $or: [
+          { from: email },
+          { submittedBy: email },
+          { to: email },
+          { cc: email },
+        ],
+      }
+    } else {
+      return res.status(404).json({ error: 'User not found' })
     }
 
     const [vouchers, admins] = await Promise.all([

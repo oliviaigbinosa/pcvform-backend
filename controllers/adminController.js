@@ -66,11 +66,11 @@ export const createUser = async (req, res) => {
     const normalizedEmail = email.trim().toLowerCase()
     
     // Validate email format
-    if (!/^[^\s@.]+(?:\.[^\s@.]+)*@[^\s@.]+(?:\.[^\s@.]+)+$/.test(normalizedEmail)) {
-      return res.status(400).json({ error: 'Invalid email format' })
-    }
     if (!/@getpayedmail\.com$/.test(normalizedEmail)) {
       return res.status(400).json({ error: 'Email must end with @getpayedmail.com' })
+    }
+    if (!/^[^\s@.]+\.[^\s@.]+@getpayedmail\.com$/.test(normalizedEmail)) {
+      return res.status(400).json({ error: 'Email must have a dot separator before @' })
     }
     
     const isAdmin = role === 'admin' || role === 'super admin'

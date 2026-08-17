@@ -56,21 +56,18 @@ export const createUser = async (req, res) => {
   try {
     const { email, password, createdBy, department, role } = req.body
     const creator = String(req.headers['x-admin-email'] || req.body.createdBy || '').trim().toLowerCase()
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' })
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' })
+    }
+    if (!department) {
+      return res.status(400).json({ error: 'Department is required' })
+    }
+    if (!role) {
+      return res.status(400).json({ error: 'Role is required' })
     }
 
     const normalizedEmail = email.trim().toLowerCase()
     const isAdmin = role === 'admin' || role === 'super admin'
-    if (role === 'super admin') {
-      if (!isGetPayedMailEmail(normalizedEmail)) {
-        return res.status(400).json({ error: 'Email must be a @getpayedmail.com address' })
-      }
-    } else {
-      if (!isUserEmail(normalizedEmail)) {
-        return res.status(400).json({ error: 'Email must use a dot separator and be a @getpayedmail.com address' })
-      }
-    }
     if (isAdmin) {
       const [creatorAdmin, creatorUser] = await Promise.all([
         Admin.findOne({ email: creator }),

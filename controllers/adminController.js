@@ -70,7 +70,7 @@ export const createUser = async (req, res) => {
       return res.status(400).json({ error: 'Email must end with @getpayedmail.com' })
     }
     if (!/^[^\s@.]+\.[^\s@.]+@getpayedmail\.com$/.test(normalizedEmail)) {
-      return res.status(400).json({ error: 'Email must have a dot separator before @' })
+      return res.status(400).json({ error: 'Enter a valid email' })
     }
     
     const isAdmin = role === 'admin' || role === 'super admin'

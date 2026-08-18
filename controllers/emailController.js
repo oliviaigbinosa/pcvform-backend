@@ -3,7 +3,9 @@ import Admin from '../models/Admin.js'
 import SuperAdmin from '../models/SuperAdmin.js'
 import {
   FINANCE_EMAIL,
+  FINANCE_MANAGER_EMAIL,
   getAllSuperAdminEmails,
+  isFinanceRoutedVoucher,
 } from '../utils/superAdmin.js'
 
 function isGetPayedMailEmail(email) {
@@ -72,9 +74,17 @@ function buildVoucherAttachments(supportingDocs) {
   }
 }
 
-function buildProcessedByLine(processedBy) {
-  if (!processedBy) return ''
-  return `\n\nProcessed by ${formatDisplay(processedBy)}`
+function buildStatusLines({ approvedBy, declinedBy, processedBy, status }) {
+  const lines = []
+  if (approvedBy) lines.push(`Approved by ${formatDisplay(approvedBy)}`)
+  if (declinedBy && status === 'Declined') {
+    lines.push(`Declined by ${formatDisplay(declinedBy)}`)
+  }
+  if (declinedBy && status === 'Rejected') {
+    lines.push(`Rejected by ${formatDisplay(declinedBy)}`)
+  }
+  if (processedBy) lines.push(`Processed by ${formatDisplay(processedBy)}`)
+  return lines.length ? `\n\n${lines.join('\n')}` : ''
 }
 
 function buildVoucherEmailText({
@@ -93,7 +103,10 @@ function buildVoucherEmailText({
   purpose,
   submissionDate,
   docs,
+  approvedBy,
+  declinedBy,
   processedBy,
+  status,
   includeCc = true,
 }) {
   const formattedAmount = Number(amount || 0).toLocaleString('en-US', {
@@ -103,7 +116,7 @@ function buildVoucherEmailText({
 
   const ccLine = includeCc && cc ? `\nCC:               ${formatDisplay(cc)}` : ''
 
-  return `${heading}\n${'═'.repeat(52)}\nVoucher No.:      ${voucherNo}\nCompany:          Getpayed Technology Solutions Ltd.\nSubmitted By:     ${submittedBy || from}\n\nEMAIL DETAILS\n${'─'.repeat(52)}\nFrom:             ${formatDisplay(from)}\nTo:               ${formatDisplay(to)}${ccLine}\nSubject:          ${subject}\n\nPAYEE INFORMATION\n${'─'.repeat(52)}\nPayee:            ${payee || ''}\nDepartment:       ${department || ''}\n\nAMOUNT & PURPOSE\n${'─'.repeat(52)}\nAmount (Figures): ₦${formattedAmount}${amountWords != null ? `\nAmount (Words):   ${amountWords || ''}` : ''}\n\nPurpose / Description:\n${purpose || ''}\n\nSUPPORTING DOCUMENTS\n${'─'.repeat(52)}\nSubmission Date:  ${submissionDate}\nAttached Files:\n${docs}\n\n${'═'.repeat(52)}\n${footer}${buildProcessedByLine(processedBy)}`
+  return `${heading}\n${'═'.repeat(52)}\nVoucher No.:      ${voucherNo}\nCompany:          Getpayed Technology Solutions Ltd.\nSubmitted By:     ${submittedBy || from}\n\nEMAIL DETAILS\n${'─'.repeat(52)}\nFrom:             ${formatDisplay(from)}\nTo:               ${formatDisplay(to)}${ccLine}\nSubject:          ${subject}\n\nPAYEE INFORMATION\n${'─'.repeat(52)}\nPayee:            ${payee || ''}\nDepartment:       ${department || ''}\n\nAMOUNT & PURPOSE\n${'─'.repeat(52)}\nAmount (Figures): ₦${formattedAmount}${amountWords != null ? `\nAmount (Words):   ${amountWords || ''}` : ''}\n\nPurpose / Description:\n${purpose || ''}\n\nSUPPORTING DOCUMENTS\n${'─'.repeat(52)}\nSubmission Date:  ${submissionDate}\nAttached Files:\n${docs}\n\n${'═'.repeat(52)}\n${footer}${buildStatusLines({ approvedBy, declinedBy, processedBy, status })}`
 }
 
 async function getFinanceAwareRecipients(to, cc) {
@@ -118,6 +131,25 @@ async function getFinanceAwareRecipients(to, cc) {
     normalizedTo === FINANCE_EMAIL || normalizedCc === FINANCE_EMAIL
 
   if (financeRouted) {
+    recipients.add(FINANCE_MANAGER_EMAIL)
+    const superAdminEmails = await getAllSuperAdminEmails()
+    superAdminEmails.forEach((email) => recipients.add(email))
+  }
+
+  return [...recipients]
+}
+
+async function getApprovedEmailRecipients(voucher) {
+  const recipients = new Set()
+  const from = String(voucher?.from || '').trim().toLowerCase()
+  const cc = String(voucher?.cc || '').trim().toLowerCase()
+
+  if (from) recipients.add(from)
+  if (cc) recipients.add(cc)
+
+  if (isFinanceRoutedVoucher(voucher)) {
+    recipients.add(FINANCE_EMAIL)
+    recipients.add(FINANCE_MANAGER_EMAIL)
     const superAdminEmails = await getAllSuperAdminEmails()
     superAdminEmails.forEach((email) => recipients.add(email))
   }
@@ -147,16 +179,20 @@ export async function sendApprovedCcEmailInternal(voucher) {
     purpose: voucher.purpose,
     submissionDate: voucher.submissionDate,
     docs,
+    approvedBy: voucher.approvedBy,
+    declinedBy: voucher.declinedBy,
     processedBy: voucher.processedBy,
+    status: voucher.status,
     includeCc: true,
   })
 
   const displayName = getDisplayName(voucher.from)
+  const recipientEmails = await getApprovedEmailRecipients(voucher)
 
   return sendMail({
     from: formatAddress(fromEmail, displayName),
     replyTo: formatAddress(voucher.from, displayName),
-    to: formatAddress(voucher.cc),
+    to: recipientEmails.map((email) => formatAddress(email)),
     subject: `Approved: ${voucher.subject || `Petty Cash Voucher ${voucher.id}`}`,
     text,
     attachments,
@@ -409,7 +445,10 @@ export const sendVoucherEmail = async (req, res) => {
       purpose,
       submissionDate,
       docs,
+      approvedBy: req.body.approvedBy,
+      declinedBy: req.body.declinedBy,
       processedBy,
+      status: req.body.status,
       includeCc: Boolean(cc),
     })
 

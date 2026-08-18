@@ -116,7 +116,11 @@ export const updateVoucherStatus = async (req, res) => {
     }
 
     const update = { status }
-    if (['Approved', 'Declined', 'Processed', 'Rejected'].includes(status)) {
+    if (status === 'Approved') {
+      update.approvedBy = updater
+    } else if (status === 'Declined' || status === 'Rejected') {
+      update.declinedBy = updater
+    } else if (status === 'Processed') {
       update.processedBy = updater
     }
 
@@ -125,11 +129,11 @@ export const updateVoucherStatus = async (req, res) => {
       return res.status(404).json({ error: 'Voucher not found' })
     }
 
-    if (status === 'Approved' && voucher.cc) {
+    if (status === 'Approved') {
       try {
         await sendApprovedCcEmailInternal(voucher.toObject())
       } catch (emailError) {
-        console.error('Failed to send approved CC email', emailError)
+        console.error('Failed to send approved notification email', emailError)
       }
     }
 

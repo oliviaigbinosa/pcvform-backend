@@ -1,6 +1,27 @@
 import Voucher from '../models/Voucher.js'
 import Admin from '../models/Admin.js'
 import User from '../models/User.js'
+import SuperAdmin from '../models/SuperAdmin.js'
+import {
+  findAccountByEmail,
+  getAllSuperAdminEmails,
+  isFinanceRoutedVoucher,
+  isSuperAdminEmail,
+} from '../utils/superAdmin.js'
+import { sendApprovedCcEmailInternal } from './emailController.js'
+
+async function enrichVoucher(voucher) {
+  const admin = await Admin.findOne({
+    email: String(voucher.submittedBy || voucher.from).toLowerCase(),
+  }).lean()
+  const superAdmin = await SuperAdmin.findOne({
+    email: String(voucher.submittedBy || voucher.from).toLowerCase(),
+  }).lean()
+  return {
+    ...voucher,
+    submitterIsAdmin: Boolean(admin || superAdmin),
+  }
+}
 
 export const getVouchers = async (req, res) => {
   try {
@@ -8,46 +29,39 @@ export const getVouchers = async (req, res) => {
     if (!email) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
-    const [admin, user] = await Promise.all([
-      Admin.findOne({ email }),
-      User.findOne({ email }),
-    ])
 
+    const account = await findAccountByEmail(email)
+    if (!account) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    const isSuper = await isSuperAdminEmail(email)
     let query
-    if (admin) {
-      if (admin.role === 'super admin') {
-        query = {}
+
+    if (isSuper) {
+      query = {}
+    } else if (account.constructor.modelName === 'Admin') {
+      const users = await User.find({ createdBy: email }, 'email')
+      const emails = users.map((u) => u.email)
+      if (emails.length > 0) {
+        query = { from: { $in: emails } }
       } else {
-        const users = await User.find({ createdBy: email }, 'email')
-        const emails = users.map((u) => u.email)
-        if (emails.length > 0) {
-          query = { from: { $in: emails } }
-        } else {
-          query = { _id: { $in: [] } }
-        }
+        query = { _id: { $in: [] } }
       }
-    } else if (user) {
+    } else {
       query = {
         $or: [
           { from: email },
           { submittedBy: email },
           { to: email },
           { cc: email },
+          { financeSuperAdminRecipients: email },
         ],
       }
-    } else {
-      return res.status(404).json({ error: 'User not found' })
     }
 
-    const [vouchers, admins] = await Promise.all([
-      Voucher.find(query).sort({ createdAt: -1 }).lean(),
-      Admin.find({}, 'email').lean(),
-    ])
-    const adminEmails = new Set(admins.map((a) => a.email.toLowerCase()))
-    const result = vouchers.map((voucher) => ({
-      ...voucher,
-      submitterIsAdmin: adminEmails.has(String(voucher.submittedBy || voucher.from).toLowerCase()),
-    }))
+    const vouchers = await Voucher.find(query).sort({ createdAt: -1 }).lean()
+    const result = await Promise.all(vouchers.map((voucher) => enrichVoucher(voucher)))
     return res.json(result)
   } catch (error) {
     console.error('Failed to list vouchers', error)
@@ -67,12 +81,13 @@ export const createVoucher = async (req, res) => {
       return res.status(409).json({ error: 'Voucher with this ID already exists' })
     }
 
-    const voucher = await Voucher.create(req.body)
-    const admin = await Admin.findOne({
-      email: String(req.body.submittedBy || req.body.from).toLowerCase(),
-    }).lean()
-    const result = voucher.toObject()
-    result.submitterIsAdmin = Boolean(admin)
+    const payload = { ...req.body }
+    if (isFinanceRoutedVoucher(payload)) {
+      payload.financeSuperAdminRecipients = await getAllSuperAdminEmails()
+    }
+
+    const voucher = await Voucher.create(payload)
+    const result = await enrichVoucher(voucher.toObject())
     return res.status(201).json(result)
   } catch (error) {
     console.error('Failed to create voucher', error)
@@ -88,31 +103,37 @@ export const updateVoucherStatus = async (req, res) => {
       return res.status(400).json({ error: 'Status is required' })
     }
 
-    if (status === 'Processed') {
-      const updater = String(req.headers['x-user-email'] || '').trim().toLowerCase()
-      if (!updater) {
-        return res.status(403).json({ error: 'Super admin email required' })
-      }
-      const admin = await Admin.findOne({ email: updater, role: 'super admin' })
-      if (!admin) {
+    const updater = String(req.headers['x-user-email'] || '').trim().toLowerCase()
+    if (!updater) {
+      return res.status(403).json({ error: 'User email required' })
+    }
+
+    if (status === 'Processed' || status === 'Rejected') {
+      const isSuper = await isSuperAdminEmail(updater)
+      if (!isSuper) {
         return res.status(403).json({ error: 'Only super admins can process vouchers' })
       }
     }
 
-    const voucher = await Voucher.findOneAndUpdate(
-      { id },
-      { status },
-      { new: true },
-    )
+    const update = { status }
+    if (['Approved', 'Declined', 'Processed', 'Rejected'].includes(status)) {
+      update.processedBy = updater
+    }
+
+    const voucher = await Voucher.findOneAndUpdate({ id }, update, { new: true })
     if (!voucher) {
       return res.status(404).json({ error: 'Voucher not found' })
     }
 
-    const admin = await Admin.findOne({
-      email: String(voucher.submittedBy || voucher.from).toLowerCase(),
-    }).lean()
-    const result = voucher.toObject()
-    result.submitterIsAdmin = Boolean(admin)
+    if (status === 'Approved' && voucher.cc) {
+      try {
+        await sendApprovedCcEmailInternal(voucher.toObject())
+      } catch (emailError) {
+        console.error('Failed to send approved CC email', emailError)
+      }
+    }
+
+    const result = await enrichVoucher(voucher.toObject())
     return res.json(result)
   } catch (error) {
     console.error('Failed to update voucher status', error)

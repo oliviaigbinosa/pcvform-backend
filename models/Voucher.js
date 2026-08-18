@@ -22,6 +22,8 @@ const voucherSchema = new mongoose.Schema({
   subject: { type: String, required: true },
   supportingDocs: { type: [supportingDocSchema], default: [] },
   status: { type: String, default: 'Pending' },
+  processedBy: { type: String },
+  financeSuperAdminRecipients: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now },
 })
 

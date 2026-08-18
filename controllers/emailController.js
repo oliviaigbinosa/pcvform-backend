@@ -1,5 +1,10 @@
 import User from '../models/User.js'
 import Admin from '../models/Admin.js'
+import SuperAdmin from '../models/SuperAdmin.js'
+import {
+  FINANCE_EMAIL,
+  getAllSuperAdminEmails,
+} from '../utils/superAdmin.js'
 
 function isGetPayedMailEmail(email) {
   return /^[^\s@]+@getpayedmail\.com$/.test(email)
@@ -38,6 +43,124 @@ function formatDisplay(email) {
 
 function escapeHtml(text) {
   return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function buildVoucherAttachments(supportingDocs) {
+  const attachments = []
+  const docLines = []
+  if (Array.isArray(supportingDocs) && supportingDocs.length) {
+    for (const doc of supportingDocs) {
+      if (typeof doc === 'object' && doc?.data) {
+        const match = doc.data.match(/^data:([^;]+);base64,(.+)$/)
+        if (match) {
+          const [, contentType, base64] = match
+          attachments.push({
+            filename: doc.name || 'attachment',
+            content: Buffer.from(base64, 'base64'),
+            contentType,
+          })
+        }
+        docLines.push(`  • ${doc.name || 'attachment'}`)
+      } else if (typeof doc === 'string') {
+        docLines.push(`  • ${doc}`)
+      }
+    }
+  }
+  return {
+    attachments,
+    docs: docLines.length ? docLines.join('\n') : '  None',
+  }
+}
+
+function buildProcessedByLine(processedBy) {
+  if (!processedBy) return ''
+  return `\n\nProcessed by ${formatDisplay(processedBy)}`
+}
+
+function buildVoucherEmailText({
+  heading,
+  footer,
+  voucherNo,
+  submittedBy,
+  from,
+  to,
+  cc,
+  subject,
+  payee,
+  department,
+  amount,
+  amountWords,
+  purpose,
+  submissionDate,
+  docs,
+  processedBy,
+  includeCc = true,
+}) {
+  const formattedAmount = Number(amount || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
+  const ccLine = includeCc && cc ? `\nCC:               ${formatDisplay(cc)}` : ''
+
+  return `${heading}\n${'═'.repeat(52)}\nVoucher No.:      ${voucherNo}\nCompany:          Getpayed Technology Solutions Ltd.\nSubmitted By:     ${submittedBy || from}\n\nEMAIL DETAILS\n${'─'.repeat(52)}\nFrom:             ${formatDisplay(from)}\nTo:               ${formatDisplay(to)}${ccLine}\nSubject:          ${subject}\n\nPAYEE INFORMATION\n${'─'.repeat(52)}\nPayee:            ${payee || ''}\nDepartment:       ${department || ''}\n\nAMOUNT & PURPOSE\n${'─'.repeat(52)}\nAmount (Figures): ₦${formattedAmount}${amountWords != null ? `\nAmount (Words):   ${amountWords || ''}` : ''}\n\nPurpose / Description:\n${purpose || ''}\n\nSUPPORTING DOCUMENTS\n${'─'.repeat(52)}\nSubmission Date:  ${submissionDate}\nAttached Files:\n${docs}\n\n${'═'.repeat(52)}\n${footer}${buildProcessedByLine(processedBy)}`
+}
+
+async function getFinanceAwareRecipients(to, cc) {
+  const recipients = new Set()
+  const normalizedTo = String(to || '').trim().toLowerCase()
+  const normalizedCc = String(cc || '').trim().toLowerCase()
+
+  if (normalizedTo) recipients.add(normalizedTo)
+  if (normalizedCc) recipients.add(normalizedCc)
+
+  const financeRouted =
+    normalizedTo === FINANCE_EMAIL || normalizedCc === FINANCE_EMAIL
+
+  if (financeRouted) {
+    const superAdminEmails = await getAllSuperAdminEmails()
+    superAdminEmails.forEach((email) => recipients.add(email))
+  }
+
+  return [...recipients]
+}
+
+export async function sendApprovedCcEmailInternal(voucher) {
+  const fromEmail = process.env.RESEND_FROM
+  if (!fromEmail) {
+    throw new Error('FROM email is not configured')
+  }
+
+  const { attachments, docs } = buildVoucherAttachments(voucher.supportingDocs)
+  const text = buildVoucherEmailText({
+    heading: 'PETTY CASH VOUCHER APPROVED',
+    footer: 'This voucher has been approved.',
+    voucherNo: voucher.id,
+    submittedBy: voucher.submittedBy,
+    from: voucher.from,
+    to: voucher.to,
+    cc: voucher.cc,
+    subject: voucher.subject,
+    payee: voucher.payee,
+    department: voucher.department,
+    amount: voucher.amount,
+    purpose: voucher.purpose,
+    submissionDate: voucher.submissionDate,
+    docs,
+    processedBy: voucher.processedBy,
+    includeCc: true,
+  })
+
+  const displayName = getDisplayName(voucher.from)
+
+  return sendMail({
+    from: formatAddress(fromEmail, displayName),
+    replyTo: formatAddress(voucher.from, displayName),
+    to: formatAddress(voucher.cc),
+    subject: `Approved: ${voucher.subject || `Petty Cash Voucher ${voucher.id}`}`,
+    text,
+    attachments,
+  })
 }
 
 export async function sendMail(mailOptions) {
@@ -123,7 +246,10 @@ export const sendInviteEmail = async (req, res) => {
       return res.status(400).json({ error: 'To email must be a @getpayedmail.com or @resend.dev address' })
     }
 
-    const existingUser = await User.findOne({ email: toEmail }) || await Admin.findOne({ email: toEmail })
+    const existingUser =
+      (await User.findOne({ email: toEmail })) ||
+      (await Admin.findOne({ email: toEmail })) ||
+      (await SuperAdmin.findOne({ email: toEmail }))
     if (!existingUser) {
       return res.status(400).json({ error: 'User not found in database. Invite failed' })
     }
@@ -171,7 +297,21 @@ If you have any questions, please contact your administrator.`
 
 export const sendApprovedCcEmail = async (req, res) => {
   try {
-    const { cc, voucherNo, from, to, submittedBy, amount, payee, department, purpose, subject, submissionDate, supportingDocs } = req.body
+    const {
+      cc,
+      voucherNo,
+      from,
+      to,
+      submittedBy,
+      amount,
+      payee,
+      department,
+      purpose,
+      subject,
+      submissionDate,
+      supportingDocs,
+      processedBy,
+    } = req.body
 
     if (!cc || !voucherNo) {
       return res.status(400).json({ error: 'Missing required CC fields' })
@@ -190,45 +330,20 @@ export const sendApprovedCcEmail = async (req, res) => {
       return res.status(500).json({ error: 'FROM email must be a @getpayedmail.com address' })
     }
 
-    const formattedAmount = Number(amount || 0).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-
-    const attachments = []
-    const docLines = []
-    if (Array.isArray(supportingDocs) && supportingDocs.length) {
-      for (const doc of supportingDocs) {
-        if (typeof doc === 'object' && doc?.data) {
-          const match = doc.data.match(/^data:([^;]+);base64,(.+)$/)
-          if (match) {
-            const [, contentType, base64] = match
-            attachments.push({
-              filename: doc.name || 'attachment',
-              content: Buffer.from(base64, 'base64'),
-              contentType,
-            })
-          }
-          docLines.push(`  • ${doc.name || 'attachment'}`)
-        } else if (typeof doc === 'string') {
-          docLines.push(`  • ${doc}`)
-        }
-      }
-    }
-
-    const docs = docLines.length ? docLines.join('\n') : '  None'
-
-    const text = `PETTY CASH VOUCHER APPROVED\n${'═'.repeat(52)}\nVoucher No.:      ${voucherNo}\nCompany:          Getpayed Technology Solutions Ltd.\nSubmitted By:     ${submittedBy || from}\n\nEMAIL DETAILS\n${'─'.repeat(52)}\nFrom:             ${formatDisplay(from)}\nTo:               ${formatDisplay(to)}\nCC:               ${formatDisplay(cc)}\nSubject:          ${subject}\n\nPAYEE INFORMATION\n${'─'.repeat(52)}\nPayee:            ${payee || ''}\nDepartment:       ${department || ''}\n\nAMOUNT & PURPOSE\n${'─'.repeat(52)}\nAmount (Figures): ₦${formattedAmount}\n\nPurpose / Description:\n${purpose || ''}\n\nSUPPORTING DOCUMENTS\n${'─'.repeat(52)}\nSubmission Date:  ${submissionDate}\nAttached Files:\n${docs}\n\n${'═'.repeat(52)}\nThis voucher has been approved.`
-
-    const displayName = getDisplayName(from)
-
-    const info = await sendMail({
-      from: formatAddress(fromEmail, displayName),
-      replyTo: formatAddress(from, displayName),
-      to: formatAddress(cc),
-      subject: `Approved: ${subject || `Petty Cash Voucher ${voucherNo}`}`,
-      text,
-      attachments,
+    const info = await sendApprovedCcEmailInternal({
+      id: voucherNo,
+      from,
+      to,
+      cc,
+      subject,
+      submittedBy,
+      amount,
+      payee,
+      department,
+      purpose,
+      submissionDate,
+      supportingDocs,
+      processedBy,
     })
 
     return res.json({ ok: true, messageId: info.messageId })
@@ -254,14 +369,18 @@ export const sendVoucherEmail = async (req, res) => {
       submissionDate,
       supportingDocs,
       submittedBy,
+      processedBy,
     } = req.body
 
     if (!to || !subject || !voucherNo) {
       return res.status(400).json({ error: 'Missing required email fields' })
     }
 
-    if (!isAllowedRecipient(to)) {
-      return res.status(400).json({ error: 'To email must be a @getpayedmail.com or @resend.dev address' })
+    const recipientEmails = await getFinanceAwareRecipients(to, cc)
+    for (const recipient of recipientEmails) {
+      if (!isAllowedRecipient(recipient)) {
+        return res.status(400).json({ error: 'All recipient emails must be @getpayedmail.com or @resend.dev addresses' })
+      }
     }
 
     const fromEmail = process.env.RESEND_FROM
@@ -273,49 +392,37 @@ export const sendVoucherEmail = async (req, res) => {
       return res.status(500).json({ error: 'FROM email must be a @getpayedmail.com address' })
     }
 
-    const formattedAmount = Number(amount || 0).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+    const { attachments, docs } = buildVoucherAttachments(supportingDocs)
+    const text = buildVoucherEmailText({
+      heading: 'PETTY CASH VOUCHER',
+      footer: 'This voucher was generated by the Petty Cash Voucher System.',
+      voucherNo,
+      submittedBy,
+      from,
+      to,
+      cc,
+      subject,
+      payee,
+      department,
+      amount,
+      amountWords,
+      purpose,
+      submissionDate,
+      docs,
+      processedBy,
+      includeCc: Boolean(cc),
     })
 
-    const attachments = []
-    const docLines = []
-    if (Array.isArray(supportingDocs) && supportingDocs.length) {
-      for (const doc of supportingDocs) {
-        if (typeof doc === 'object' && doc?.data) {
-          const match = doc.data.match(/^data:([^;]+);base64,(.+)$/)
-          if (match) {
-            const [, contentType, base64] = match
-            attachments.push({
-              filename: doc.name || 'attachment',
-              content: Buffer.from(base64, 'base64'),
-              contentType,
-            })
-          }
-          docLines.push(`  • ${doc.name || 'attachment'}`)
-        } else if (typeof doc === 'string') {
-          docLines.push(`  • ${doc}`)
-        }
-      }
-    }
-
-    const docs = docLines.length ? docLines.join('\n') : '  None'
-
-    const text = `PETTY CASH VOUCHER\n${'═'.repeat(52)}\nVoucher No.:      ${voucherNo}\nCompany:          Getpayed Technology Solutions Ltd.\nSubmitted By:     ${submittedBy || from}\n\nEMAIL DETAILS\n${'─'.repeat(52)}\nFrom:             ${formatDisplay(from)}\nTo:               ${formatDisplay(to)}${cc ? `\nCC:               ${formatDisplay(cc)}` : ''}\nSubject:          ${subject}\n\nPAYEE INFORMATION\n${'─'.repeat(52)}\nPayee:            ${payee}\nDepartment:       ${department}\n\nAMOUNT & PURPOSE\n${'─'.repeat(52)}\nAmount (Figures): ₦${formattedAmount}\nAmount (Words):   ${amountWords || ''}\n\nPurpose / Description:\n${purpose || ''}\n\nSUPPORTING DOCUMENTS\n${'─'.repeat(52)}\nSubmission Date:  ${submissionDate}\nAttached Files:\n${docs}\n\n${'═'.repeat(52)}\nThis voucher was generated by the Petty Cash Voucher System.`
-
     const displayName = getDisplayName(from)
-
     const mailOptions = {
       from: formatAddress(fromEmail, displayName),
       replyTo: formatAddress(from, displayName),
-      to: formatAddress(to),
+      to: recipientEmails.map((email) => formatAddress(email)),
       subject: `PCV: ${subject}`,
       text,
       attachments,
     }
-    if (cc) {
-      mailOptions.cc = formatAddress(cc)
-    }
+
     const info = await sendMail(mailOptions)
 
     return res.json({ ok: true, messageId: info.messageId })

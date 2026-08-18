@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import User from '../models/User.js'
 import Admin from '../models/Admin.js'
 import SuperAdmin from '../models/SuperAdmin.js'
+import { findAccountByEmail, isSuperAdminEmail } from '../utils/superAdmin.js'
 
 function isGetPayedMailEmail(email) {
   return /^[^\s@]+@getpayedmail\.com$/.test(email)
@@ -18,12 +19,7 @@ function getCreatedAt(user) {
 export const listUsers = async (req, res) => {
   try {
     const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
-    const [requestingAdmin, requestingUser] = await Promise.all([
-      Admin.findOne({ email }, '-password'),
-      User.findOne({ email }, '-password'),
-    ])
-    const isSuper =
-      requestingAdmin?.role === 'super admin' || requestingUser?.role === 'super admin'
+    const isSuper = await isSuperAdminEmail(email)
 
     let users = []
     let admins = []
@@ -85,13 +81,7 @@ export const createUser = async (req, res) => {
     
     const isAdmin = finalRole === 'admin' || finalRole === 'super admin'
     
-    // Check if creator is super admin
-    const [creatorAdmin, creatorUser] = await Promise.all([
-      Admin.findOne({ email: creator }),
-      User.findOne({ email: creator }),
-    ])
-    const isSuper =
-      creatorAdmin?.role === 'super admin' || creatorUser?.role === 'super admin'
+    const isSuper = await isSuperAdminEmail(creator)
     
     // Only super admins need to provide role (unless auto-assigned for Finance)
     if (isSuper && !role && normalizedDepartment.toLowerCase() !== 'finance') {
@@ -195,15 +185,11 @@ export const deleteUser = async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    const [requesterAdmin, requesterUser] = await Promise.all([
-      Admin.findOne({ email: requesterEmail }),
-      User.findOne({ email: requesterEmail }),
-    ])
-    if (!requesterAdmin && !requesterUser) {
+    const requester = await findAccountByEmail(requesterEmail)
+    if (!requester) {
       return res.status(403).json({ error: 'Forbidden' })
     }
-    const isSuper =
-      requesterAdmin?.role === 'super admin' || requesterUser?.role === 'super admin'
+    const isSuper = await isSuperAdminEmail(requesterEmail)
 
     let user = await User.findById(req.params.id)
     if (!user) {

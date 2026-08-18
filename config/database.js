@@ -15,15 +15,36 @@ export async function connectDb() {
 export async function seedAdmin() {
   const superEmail = process.env.SUPER_ADMIN_EMAIL
   const superPassword = process.env.SUPER_ADMIN_PASSWORD
+  
+  console.log('Checking super admin credentials...')
+  console.log('SUPER_ADMIN_EMAIL:', superEmail ? superEmail : 'NOT SET')
+  console.log('SUPER_ADMIN_PASSWORD:', superPassword ? '*** SET ***' : 'NOT SET')
+  
   if (!superEmail || !superPassword) {
     console.warn('SUPER_ADMIN_EMAIL or SUPER_ADMIN_PASSWORD not set — skipping super admin seed')
     return
   }
 
-  const existingSuper = await Admin.findOne({ email: superEmail.toLowerCase() })
-  if (!existingSuper) {
+  const normalizedEmail = superEmail.toLowerCase()
+  console.log('Looking for existing super admin with email:', normalizedEmail)
+  
+  const existingSuper = await Admin.findOne({ email: normalizedEmail })
+  if (existingSuper) {
+    console.log('Super admin already exists with email:', normalizedEmail)
+    return
+  }
+  
+  console.log('No existing super admin found, creating new one...')
+  try {
     const hashed = await bcrypt.hash(superPassword, 10)
-    await Admin.create({ email: superEmail.toLowerCase(), password: hashed, role: 'super admin' })
-    console.log('Seeded super admin account')
+    const newAdmin = await Admin.create({ 
+      email: normalizedEmail, 
+      password: hashed, 
+      role: 'super admin' 
+    })
+    console.log('Seeded super admin account successfully:', newAdmin.email)
+  } catch (error) {
+    console.error('Failed to seed super admin:', error)
+    throw error
   }
 }

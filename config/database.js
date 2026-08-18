@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 import Admin from '../models/Admin.js'
+import SuperAdmin from '../models/SuperAdmin.js'
 
 export async function connectDb() {
   const uri = process.env.MONGODB_URI
@@ -28,8 +29,10 @@ export async function seedAdmin() {
   const normalizedEmail = superEmail.toLowerCase()
   console.log('Looking for existing super admin with email:', normalizedEmail)
   
-  const existingSuper = await Admin.findOne({ email: normalizedEmail })
-  if (existingSuper) {
+  // Check SuperAdmin collection only
+  const existingSuperAdmin = await SuperAdmin.findOne({ email: normalizedEmail })
+  
+  if (existingSuperAdmin) {
     console.log('Super admin already exists with email:', normalizedEmail)
     return
   }
@@ -37,12 +40,15 @@ export async function seedAdmin() {
   console.log('No existing super admin found, creating new one...')
   try {
     const hashed = await bcrypt.hash(superPassword, 10)
-    const newAdmin = await Admin.create({ 
+    
+    // Create only in SuperAdmin collection
+    const newSuperAdmin = await SuperAdmin.create({ 
       email: normalizedEmail, 
       password: hashed, 
       role: 'super admin' 
     })
-    console.log('Seeded super admin account successfully:', newAdmin.email)
+    
+    console.log('Seeded super admin account successfully:', newSuperAdmin.email)
   } catch (error) {
     console.error('Failed to seed super admin:', error)
     throw error

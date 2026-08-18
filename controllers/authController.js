@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import Admin from '../models/Admin.js'
 import User from '../models/User.js'
+import SuperAdmin from '../models/SuperAdmin.js'
 import { sendMail } from './emailController.js'
 
 export const login = async (req, res) => {
@@ -12,9 +13,23 @@ export const login = async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    const admin = await Admin.findOne({ email: normalizedEmail })
+    const [admin, superAdmin, user] = await Promise.all([
+      Admin.findOne({ email: normalizedEmail }),
+      SuperAdmin.findOne({ email: normalizedEmail }),
+      User.findOne({ email: normalizedEmail })
+    ])
 
-    if (admin) {
+    // Check SuperAdmin first (highest priority)
+    if (superAdmin) {
+      const valid = await bcrypt.compare(password, superAdmin.password)
+      if (!valid) {
+        return res.status(401).json({ error: 'Invalid email or password' })
+      }
+      return res.json({ email: superAdmin.email, role: superAdmin.role || 'super admin', department: superAdmin.department || '' })
+    }
+
+    // Check Admin (regular admins only, not super admins)
+    if (admin && admin.role !== 'super admin') {
       const valid = await bcrypt.compare(password, admin.password)
       if (!valid) {
         return res.status(401).json({ error: 'Invalid email or password' })
@@ -22,22 +37,22 @@ export const login = async (req, res) => {
       return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
     }
 
-    const user = await User.findOne({ email: normalizedEmail })
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' })
+    // Check User
+    if (user) {
+      const valid = await bcrypt.compare(password, user.password)
+      if (!valid) {
+        return res.status(401).json({ error: 'Invalid email or password' })
+      }
+
+      return res.json({
+        email: user.email,
+        role: user.role || 'user',
+        department: user.department || '',
+        createdBy: user.createdBy || '',
+      })
     }
 
-    const valid = await bcrypt.compare(password, user.password)
-    if (!valid) {
-      return res.status(401).json({ error: 'Invalid email or password' })
-    }
-
-    return res.json({
-      email: user.email,
-      role: user.role || 'user',
-      department: user.department || '',
-      createdBy: user.createdBy || '',
-    })
+    return res.status(401).json({ error: 'Invalid email or password' })
   } catch (error) {
     console.error('Login failed', error)
     return res.status(500).json({ error: 'Login failed' })
@@ -52,9 +67,26 @@ export const changePassword = async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    const admin = await Admin.findOne({ email: normalizedEmail })
+    const [admin, superAdmin, user] = await Promise.all([
+      Admin.findOne({ email: normalizedEmail }),
+      SuperAdmin.findOne({ email: normalizedEmail }),
+      User.findOne({ email: normalizedEmail })
+    ])
 
-    if (admin) {
+    // Check SuperAdmin first
+    if (superAdmin) {
+      const valid = await bcrypt.compare(currentPassword, superAdmin.password)
+      if (!valid) {
+        return res.status(401).json({ error: 'Current password is incorrect' })
+      }
+
+      superAdmin.password = await bcrypt.hash(newPassword, 10)
+      await superAdmin.save()
+      return res.json({ ok: true })
+    }
+
+    // Check Admin (regular admins only, not super admins)
+    if (admin && admin.role !== 'super admin') {
       const valid = await bcrypt.compare(currentPassword, admin.password)
       if (!valid) {
         return res.status(401).json({ error: 'Current password is incorrect' })
@@ -65,19 +97,19 @@ export const changePassword = async (req, res) => {
       return res.json({ ok: true })
     }
 
-    const user = await User.findOne({ email: normalizedEmail })
-    if (!user) {
-      return res.status(404).json({ error: 'Account not found' })
+    // Check User
+    if (user) {
+      const valid = await bcrypt.compare(currentPassword, user.password)
+      if (!valid) {
+        return res.status(401).json({ error: 'Current password is incorrect' })
+      }
+
+      user.password = await bcrypt.hash(newPassword, 10)
+      await user.save()
+      return res.json({ ok: true })
     }
 
-    const valid = await bcrypt.compare(currentPassword, user.password)
-    if (!valid) {
-      return res.status(401).json({ error: 'Current password is incorrect' })
-    }
-
-    user.password = await bcrypt.hash(newPassword, 10)
-    await user.save()
-    return res.json({ ok: true })
+    return res.status(404).json({ error: 'Account not found' })
   } catch (error) {
     console.error('Change password failed', error)
     return res.status(500).json({ error: 'Failed to update password' })
@@ -91,17 +123,28 @@ export const getMe = async (req, res) => {
       return res.status(401).json({ error: 'Email required' })
     }
 
-    const admin = await Admin.findOne({ email })
-    if (admin) {
+    const [admin, superAdmin, user] = await Promise.all([
+      Admin.findOne({ email }),
+      SuperAdmin.findOne({ email }),
+      User.findOne({ email })
+    ])
+
+    // Check SuperAdmin first
+    if (superAdmin) {
+      return res.json({ email: superAdmin.email, role: superAdmin.role || 'super admin', department: superAdmin.department || '' })
+    }
+
+    // Check Admin (regular admins only, not super admins)
+    if (admin && admin.role !== 'super admin') {
       return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
     }
 
-    const user = await User.findOne({ email })
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' })
+    // Check User
+    if (user) {
+      return res.json({ email: user.email, role: user.role || 'user', department: user.department || '', createdBy: user.createdBy || '' })
     }
 
-    return res.json({ email: user.email, role: user.role || 'user', department: user.department || '', createdBy: user.createdBy || '' })
+    return res.status(404).json({ error: 'User not found' })
   } catch (error) {
     console.error('Get me failed', error)
     return res.status(500).json({ error: 'Failed to fetch user' })
@@ -137,9 +180,12 @@ export const forgotPassword = async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    const admin = await Admin.findOne({ email: normalizedEmail })
-    const user = await User.findOne({ email: normalizedEmail })
-    if (!admin && !user) {
+    const [admin, superAdmin, user] = await Promise.all([
+      Admin.findOne({ email: normalizedEmail }),
+      SuperAdmin.findOne({ email: normalizedEmail }),
+      User.findOne({ email: normalizedEmail })
+    ])
+    if (!admin && !superAdmin && !user) {
       return res.status(404).json({ error: 'No account found with that email address' })
     }
 
@@ -188,14 +234,21 @@ export const resetPassword = async (req, res) => {
     }
 
     const normalizedEmail = decoded.email
-    const admin = await Admin.findOne({ email: normalizedEmail })
-    const user = await User.findOne({ email: normalizedEmail })
-    if (!admin && !user) {
+    const [admin, superAdmin, user] = await Promise.all([
+      Admin.findOne({ email: normalizedEmail }),
+      SuperAdmin.findOne({ email: normalizedEmail }),
+      User.findOne({ email: normalizedEmail })
+    ])
+    if (!admin && !superAdmin && !user) {
       return res.status(404).json({ error: 'Account no longer exists' })
     }
 
     const hashed = await bcrypt.hash(newPassword, 10)
-    if (admin) {
+    if (superAdmin) {
+      superAdmin.password = hashed
+      await superAdmin.save()
+    }
+    if (admin && admin.role !== 'super admin') {
       admin.password = hashed
       await admin.save()
     }

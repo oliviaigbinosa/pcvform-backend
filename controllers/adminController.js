@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs'
 import User from '../models/User.js'
 import Admin from '../models/Admin.js'
+import SuperAdmin from '../models/SuperAdmin.js'
 
 function isGetPayedMailEmail(email) {
   return /^[^\s@]+@getpayedmail\.com$/.test(email)
@@ -26,15 +27,17 @@ export const listUsers = async (req, res) => {
 
     let users = []
     let admins = []
+    let superAdmins = []
 
     if (isSuper) {
       users = await User.find({}, '-password')
       admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password')
+      superAdmins = await SuperAdmin.find({}, '-password')
     } else {
       users = await User.find({ createdBy: email }, '-password')
     }
 
-    const all = [...users, ...admins].sort(
+    const all = [...users, ...admins, ...superAdmins].sort(
       (a, b) => getCreatedAt(a).getTime() - getCreatedAt(b).getTime(),
     )
     return res.json(
@@ -64,6 +67,7 @@ export const createUser = async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
+    const normalizedDepartment = department.trim()
     
     // Validate email format
     if (!/@getpayedmail\.com$/.test(normalizedEmail)) {
@@ -73,7 +77,13 @@ export const createUser = async (req, res) => {
       return res.status(400).json({ error: 'Enter a valid email' })
     }
     
-    const isAdmin = role === 'admin' || role === 'super admin'
+    // Auto-assign super admin role for Finance department
+    let finalRole = role
+    if (normalizedDepartment.toLowerCase() === 'finance') {
+      finalRole = 'super admin'
+    }
+    
+    const isAdmin = finalRole === 'admin' || finalRole === 'super admin'
     
     // Check if creator is super admin
     const [creatorAdmin, creatorUser] = await Promise.all([
@@ -83,30 +93,57 @@ export const createUser = async (req, res) => {
     const isSuper =
       creatorAdmin?.role === 'super admin' || creatorUser?.role === 'super admin'
     
-    // Only super admins need to provide role
-    if (isSuper && !role) {
+    // Only super admins need to provide role (unless auto-assigned for Finance)
+    if (isSuper && !role && normalizedDepartment.toLowerCase() !== 'finance') {
       return res.status(400).json({ error: 'Role is required' })
     }
     
     if (isAdmin && !isSuper) {
       return res.status(403).json({ error: 'Only super admins can create admin accounts' })
     }
+    
+    // Validate: Finance department members cannot be department managers
+    if (normalizedDepartment.toLowerCase() === 'finance' && role === 'admin') {
+      return res.status(400).json({ error: 'Select the appropriate role' })
+    }
 
     const existingUser = await User.findOne({ email: normalizedEmail })
     const existingAdmin = await Admin.findOne({ email: normalizedEmail })
-    if (existingUser || existingAdmin) {
+    const existingSuperAdmin = await SuperAdmin.findOne({ email: normalizedEmail })
+    if (existingUser || existingAdmin || existingSuperAdmin) {
       return res.status(409).json({ error: 'This user has already been added' })
     }
 
     const hashed = await bcrypt.hash(password, 10)
-    const Model = isAdmin ? Admin : User
-    const user = await Model.create({
-      email: normalizedEmail,
-      password: hashed,
-      role: isAdmin ? role : undefined,
-      department: department || undefined,
-      createdBy: creator || createdBy || undefined,
-    })
+    
+    // Create user in appropriate collection
+    let user
+    if (finalRole === 'super admin') {
+      // Create only in SuperAdmin collection
+      user = await SuperAdmin.create({
+        email: normalizedEmail,
+        password: hashed,
+        role: 'super admin',
+        department: normalizedDepartment,
+        createdBy: creator || createdBy || undefined,
+      })
+    } else if (isAdmin) {
+      user = await Admin.create({
+        email: normalizedEmail,
+        password: hashed,
+        role: finalRole,
+        department: normalizedDepartment,
+        createdBy: creator || createdBy || undefined,
+      })
+    } else {
+      user = await User.create({
+        email: normalizedEmail,
+        password: hashed,
+        role: finalRole,
+        department: normalizedDepartment,
+        createdBy: creator || createdBy || undefined,
+      })
+    }
 
     return res.status(201).json({
       id: user._id.toString(),
@@ -173,12 +210,15 @@ export const deleteUser = async (req, res) => {
       user = await Admin.findById(req.params.id)
     }
     if (!user) {
+      user = await SuperAdmin.findById(req.params.id)
+    }
+    if (!user) {
       return res.status(404).json({ error: 'User not found' })
     }
 
     const targetRole = user.role || 'user'
     if (!isSuper) {
-      if (targetRole === 'admin') {
+      if (targetRole === 'admin' || targetRole === 'super admin') {
         return res.status(403).json({ error: 'Only super admins can delete admin accounts' })
       }
       if (String(user.createdBy || '').toLowerCase() !== requesterEmail) {

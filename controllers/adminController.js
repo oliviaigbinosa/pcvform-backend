@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs'
 import User from '../models/User.js'
 import Admin from '../models/Admin.js'
 import SuperAdmin from '../models/SuperAdmin.js'
-import { findAccountByEmail, isSuperAdminEmail } from '../utils/superAdmin.js'
+import { findAccountByEmail, isSuperAdminEmail, FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
 
 function isGetPayedMailEmail(email) {
   return /^[^\s@]+@getpayedmail\.com$/.test(email)
@@ -33,9 +33,11 @@ export const listUsers = async (req, res) => {
       users = await User.find({ createdBy: email }, '-password')
     }
 
-    const all = [...users, ...admins, ...superAdmins].sort(
-      (a, b) => getCreatedAt(a).getTime() - getCreatedAt(b).getTime(),
-    )
+    const all = [...users, ...admins, ...superAdmins]
+      .filter((user) => String(user.email || '').toLowerCase() !== FINANCE_MANAGER_EMAIL)
+      .sort(
+        (a, b) => getCreatedAt(a).getTime() - getCreatedAt(b).getTime(),
+      )
     return res.json(
       all.map((user) => ({
         id: user._id.toString(),
@@ -151,8 +153,12 @@ export const createUser = async (req, res) => {
 export const listUserEmails = async (req, res) => {
   try {
     const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
-    const requester = await Admin.findOne({ email: requesterEmail })
+    const requester = await findAccountByEmail(requesterEmail)
     if (!requester) {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    const role = requester.role || (requester.constructor?.modelName === 'SuperAdmin' ? 'super admin' : 'user')
+    if (role !== 'admin' && role !== 'super admin') {
       return res.status(403).json({ error: 'Admin access required' })
     }
     const users = await User.find({}, 'email').lean()
@@ -166,15 +172,115 @@ export const listUserEmails = async (req, res) => {
 export const listAdminEmails = async (req, res) => {
   try {
     const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
-    const requester = await Admin.findOne({ email: requesterEmail })
+    const requester = await findAccountByEmail(requesterEmail)
     if (!requester) {
       return res.status(403).json({ error: 'Admin access required' })
     }
-    const admins = await Admin.find({}, 'email').lean()
-    return res.json(admins.map((admin) => admin.email.toLowerCase()))
+    const role = requester.role || (requester.constructor?.modelName === 'SuperAdmin' ? 'super admin' : 'user')
+    if (role !== 'admin' && role !== 'super admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    const [admins, superAdmins] = await Promise.all([
+      Admin.find({}, 'email').lean(),
+      SuperAdmin.find({}, 'email').lean(),
+    ])
+    const allEmails = [
+      ...admins.map((admin) => admin.email.toLowerCase()),
+      ...superAdmins.map((sa) => sa.email.toLowerCase()),
+    ]
+    return res.json([...new Set(allEmails)])
   } catch (error) {
     console.error('Failed to list admin emails', error)
     return res.status(500).json({ error: 'Failed to list admin emails' })
+  }
+}
+
+export const validateManagerEmail = async (req, res) => {
+  try {
+    const requesterEmail = String(req.headers['x-admin-email'] || req.headers['x-user-email'] || '').trim().toLowerCase()
+    const targetEmailRaw = String(req.query.email || '').trim()
+
+    if (!requesterEmail) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+
+    if (!targetEmailRaw) {
+      return res.status(400).json({ error: 'Email is required' })
+    }
+
+    const targetEmail = targetEmailRaw.toLowerCase()
+    const requester = await findAccountByEmail(requesterEmail)
+
+    if (!requester) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const requesterRole =
+      requester.role ||
+      (requester.constructor?.modelName === 'SuperAdmin'
+        ? 'super admin'
+        : requester.constructor?.modelName === 'Admin'
+          ? 'admin'
+          : 'user')
+
+    const isAdminOrSuper = requesterRole === 'admin' || requesterRole === 'super admin'
+
+    if (!isAdminOrSuper) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (targetEmail === requesterEmail) {
+      return res.json({
+        valid: false,
+        error: 'Invalid email',
+        reason: 'self',
+      })
+    }
+
+    if (!/^[^\s@]+@getpayedmail\.com$/.test(targetEmail)) {
+      return res.json({
+        valid: false,
+        error: 'Manager email must be a getpayedmail.com address',
+        reason: 'domain',
+      })
+    }
+
+    const targetAccount = await findAccountByEmail(targetEmail)
+
+    if (!targetAccount) {
+      return res.json({
+        valid: false,
+        error: 'This user has not been onboarded yet',
+        reason: 'not_onboarded',
+      })
+    }
+
+    const targetRole =
+      targetAccount.role ||
+      (targetAccount.constructor?.modelName === 'SuperAdmin'
+        ? 'super admin'
+        : targetAccount.constructor?.modelName === 'Admin'
+          ? 'admin'
+          : 'user')
+
+    const isTargetAdminOrSuper = targetRole === 'admin' || targetRole === 'super admin'
+
+    if (!isTargetAdminOrSuper) {
+      return res.json({
+        valid: false,
+        error: 'This user is not a department manager',
+        reason: 'not_manager',
+      })
+    }
+
+    return res.json({
+      valid: true,
+      email: targetEmail,
+      role: targetRole,
+    })
+  } catch (error) {
+    console.error('Failed to validate manager email', error)
+    return res.status(500).json({ error: 'Failed to validate manager email' })
   }
 }
 

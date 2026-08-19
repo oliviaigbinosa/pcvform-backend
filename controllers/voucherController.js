@@ -7,8 +7,16 @@ import {
   getAllSuperAdminEmails,
   isFinanceRoutedVoucher,
   isSuperAdminEmail,
+  FINANCE_EMAIL,
 } from '../utils/superAdmin.js'
-import { sendApprovedCcEmailInternal } from './emailController.js'
+import {
+  sendApprovedCcEmailInternal,
+  sendVoucherDeclinedEmailInternal,
+  sendVoucherProcessedEmailInternal,
+  sendVoucherRejectedEmailInternal,
+} from './emailController.js'
+
+const FINANCE_EMAIL_LOWER = FINANCE_EMAIL.toLowerCase()
 
 async function enrichVoucher(voucher) {
   const admin = await Admin.findOne({
@@ -39,15 +47,32 @@ export const getVouchers = async (req, res) => {
     let query
 
     if (isSuper) {
-      query = {}
+      const superAdminEmails = await getAllSuperAdminEmails()
+      const saEmailsNormalized = superAdminEmails.map((e) => e.toLowerCase())
+      query = {
+        $or: [
+          { from: email },
+          { submittedBy: email },
+          { to: email },
+          { cc: email },
+          { to: FINANCE_EMAIL_LOWER },
+          { cc: FINANCE_EMAIL_LOWER },
+          { financeSuperAdminRecipients: { $in: [email, ...saEmailsNormalized] } },
+        ],
+      }
     } else if (account.constructor.modelName === 'Admin') {
       const users = await User.find({ createdBy: email }, 'email')
       const emails = users.map((u) => u.email)
+      const orClauses = []
       if (emails.length > 0) {
-        query = { from: { $in: emails } }
-      } else {
-        query = { _id: { $in: [] } }
+        orClauses.push({ from: { $in: emails } })
       }
+      orClauses.push({ from: email })
+      orClauses.push({ submittedBy: email })
+      orClauses.push({ to: email })
+      orClauses.push({ cc: email })
+      orClauses.push({ financeSuperAdminRecipients: email })
+      query = { $or: orClauses }
     } else {
       query = {
         $or: [
@@ -129,15 +154,22 @@ export const updateVoucherStatus = async (req, res) => {
       return res.status(404).json({ error: 'Voucher not found' })
     }
 
-    if (status === 'Approved') {
-      try {
-        await sendApprovedCcEmailInternal(voucher.toObject())
-      } catch (emailError) {
-        console.error('Failed to send approved notification email', emailError)
+    const voucherObj = voucher.toObject()
+    try {
+      if (status === 'Approved') {
+        await sendApprovedCcEmailInternal(voucherObj)
+      } else if (status === 'Declined') {
+        await sendVoucherDeclinedEmailInternal(voucherObj)
+      } else if (status === 'Processed') {
+        await sendVoucherProcessedEmailInternal(voucherObj)
+      } else if (status === 'Rejected') {
+        await sendVoucherRejectedEmailInternal(voucherObj)
       }
+    } catch (emailError) {
+      console.error(`Failed to send ${status} notification email for voucher ${id}`, emailError)
     }
 
-    const result = await enrichVoucher(voucher.toObject())
+    const result = await enrichVoucher(voucherObj)
     return res.json(result)
   } catch (error) {
     console.error('Failed to update voucher status', error)

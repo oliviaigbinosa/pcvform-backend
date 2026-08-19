@@ -157,16 +157,71 @@ async function getApprovedEmailRecipients(voucher) {
   return [...recipients]
 }
 
-export async function sendApprovedCcEmailInternal(voucher) {
+async function getSubmitterNotificationRecipients(voucher) {
+  const recipients = new Set()
+  const from = String(voucher?.from || '').trim().toLowerCase()
+  const submittedBy = String(voucher?.submittedBy || '').trim().toLowerCase()
+
+  if (from) recipients.add(from)
+  if (submittedBy) recipients.add(submittedBy)
+
+  return [...recipients]
+}
+
+async function getStatusNotificationRecipients(voucher, status) {
+  const recipients = new Set()
+
+  const submitterRecipients = await getSubmitterNotificationRecipients(voucher)
+  submitterRecipients.forEach((email) => recipients.add(email))
+
+  if (status === 'Approved') {
+    const approvedRecipients = await getApprovedEmailRecipients(voucher)
+    approvedRecipients.forEach((email) => recipients.add(email))
+  }
+
+  if (isFinanceRoutedVoucher(voucher)) {
+    recipients.add(FINANCE_MANAGER_EMAIL)
+    const superAdminEmails = await getAllSuperAdminEmails()
+    superAdminEmails.forEach((email) => recipients.add(email))
+  }
+
+  return [...recipients]
+}
+
+async function sendVoucherStatusEmailInternal(voucher, statusLabel) {
   const fromEmail = process.env.RESEND_FROM
   if (!fromEmail) {
     throw new Error('FROM email is not configured')
   }
 
   const { attachments, docs } = buildVoucherAttachments(voucher.supportingDocs)
+
+  const headingMap = {
+    'Approved': 'PETTY CASH VOUCHER APPROVED',
+    'Declined': 'PETTY CASH VOUCHER DECLINED',
+    'Processed': 'PETTY CASH VOUCHER PROCESSED',
+    'Rejected': 'PETTY CASH VOUCHER REJECTED',
+  }
+  const footerMap = {
+    'Approved': 'This voucher has been approved.',
+    'Declined': 'This voucher has been declined.',
+    'Processed': 'This voucher has been processed.',
+    'Rejected': 'This voucher has been rejected.',
+  }
+  const subjectPrefixMap = {
+    'Approved': 'Approved:',
+    'Declined': 'Declined:',
+    'Processed': 'Processed:',
+    'Rejected': 'Rejected:',
+  }
+
+  const heading = headingMap[statusLabel] || 'PETTY CASH VOUCHER STATUS UPDATE'
+  const footer = footerMap[statusLabel] || 'This voucher has a status update.'
+  const subjectPrefix = subjectPrefixMap[statusLabel] || 'Update:'
+
   const text = buildVoucherEmailText({
-    heading: 'PETTY CASH VOUCHER APPROVED',
-    footer: 'This voucher has been approved.',
+    heading,
+    footer,
     voucherNo: voucher.id,
     submittedBy: voucher.submittedBy,
     from: voucher.from,
@@ -176,6 +231,7 @@ export async function sendApprovedCcEmailInternal(voucher) {
     payee: voucher.payee,
     department: voucher.department,
     amount: voucher.amount,
+    amountWords: voucher.amountWords,
     purpose: voucher.purpose,
     submissionDate: voucher.submissionDate,
     docs,
@@ -187,16 +243,36 @@ export async function sendApprovedCcEmailInternal(voucher) {
   })
 
   const displayName = getDisplayName(voucher.from)
-  const recipientEmails = await getApprovedEmailRecipients(voucher)
+  const recipientEmails = await getStatusNotificationRecipients(voucher, statusLabel)
+
+  if (!recipientEmails.length) {
+    throw new Error('No recipients for voucher status email')
+  }
 
   return sendMail({
     from: formatAddress(fromEmail, displayName),
     replyTo: formatAddress(voucher.from, displayName),
     to: recipientEmails.map((email) => formatAddress(email)),
-    subject: `Approved: ${voucher.subject || `Petty Cash Voucher ${voucher.id}`}`,
+    subject: `${subjectPrefix} ${voucher.subject || `Petty Cash Voucher ${voucher.id}`}`,
     text,
     attachments,
   })
+}
+
+export async function sendApprovedCcEmailInternal(voucher) {
+  return sendVoucherStatusEmailInternal(voucher, 'Approved')
+}
+
+export async function sendVoucherDeclinedEmailInternal(voucher) {
+  return sendVoucherStatusEmailInternal(voucher, 'Declined')
+}
+
+export async function sendVoucherProcessedEmailInternal(voucher) {
+  return sendVoucherStatusEmailInternal(voucher, 'Processed')
+}
+
+export async function sendVoucherRejectedEmailInternal(voucher) {
+  return sendVoucherStatusEmailInternal(voucher, 'Rejected')
 }
 
 export async function sendMail(mailOptions) {
@@ -549,6 +625,7 @@ export const sendLeaveRequestEmail = async (leave) => {
 
 export const sendLeaveStatusEmail = async (leave, status) => {
   const { employeeName, submittedBy: email, department, leaveType, startDate, endDate, reason, attachments } = leave
+  const actualStatus = String(status || leave.status || '').toLowerCase() || 'status update'
 
   if (!email) {
     throw new Error('Submitter email is required to send leave status email')
@@ -582,9 +659,10 @@ export const sendLeaveStatusEmail = async (leave, status) => {
 
   const docs = docLines.length ? docLines.join('\n') : '  None'
 
-  const heading = `LEAVE REQUEST ${String(status).toUpperCase()}`
+  const statusCapitalized = actualStatus.charAt(0).toUpperCase() + actualStatus.slice(1)
+  const heading = `LEAVE REQUEST ${statusCapitalized.toUpperCase()}`
 
-  const text = `${heading}\n${'═'.repeat(49)}\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\n\n\n\n\n\nYour leave request has been ${status}\n`
+  const text = `${heading}\n${'═'.repeat(49)}\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\n\n\n\n\n\nYour leave request has been ${actualStatus}\n`
 
   const html = `<div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
   <p style="margin: 0 0 4px 0; font-weight: bold; font-size: 16px;">${escapeHtml(heading)}</p>
@@ -600,28 +678,30 @@ export const sendLeaveStatusEmail = async (leave, status) => {
   <p style="margin: 16px 0 4px 0; font-size: 16px;"><strong style="font-size: 16px;">Attachments:</strong></p>
   <div style="padding-left: 12px; font-size: 16px; white-space: pre-wrap;">${escapeHtml(docs)}</div>
   <br><br>
-  <p style="margin: 24px 0 16px 0; font-size: 16px;"><em style="font-size: 16px;">Your leave request has been ${escapeHtml(status)}</em></p>
+  <p style="margin: 24px 0 16px 0; font-size: 16px;"><em style="font-size: 16px;">Your leave request has been ${escapeHtml(actualStatus)}</em></p>
 </div>`
 
-  const info = await sendMail({
+  const subject = `Leave Request ${statusCapitalized}`
+
+  await sendMail({
     from: formatAddress(fromEmail, getDisplayName(fromEmail)),
     to: formatAddress(email),
-    subject: `New Leave Request`,
+    subject,
     text,
     html,
     attachments: emailAttachments,
   })
 
-  if (String(status).toLowerCase() === 'approved') {
+  if (actualStatus === 'approved') {
     await sendMail({
       from: formatAddress(fromEmail, getDisplayName(fromEmail)),
       to: formatAddress('chinenye.onyia@getpayedmail.com'),
-      subject: `New Leave Request`,
+      subject,
       text,
       html,
       attachments: emailAttachments,
     })
   }
 
-  return info
+  return true
 }

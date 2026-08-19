@@ -1,39 +1,57 @@
 import LeaveRequest from '../models/LeaveRequest.js'
 import Admin from '../models/Admin.js'
 import User from '../models/User.js'
+import SuperAdmin from '../models/SuperAdmin.js'
 import { sendLeaveRequestEmail, sendLeaveStatusEmail } from '../controllers/emailController.js'
+import { FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
 
 export const getLeaveRequests = async (req, res) => {
   try {
     const email = String(req.headers['x-admin-email'] || req.headers['x-user-email'] || '').trim().toLowerCase()
-    const [admin, user] = await Promise.all([
-      email ? Admin.findOne({ email }) : null,
-      email ? User.findOne({ email }) : null,
+    const [admin, user, superAdmin] = await Promise.all([
+      email ? Admin.findOne({ email }).lean() : null,
+      email ? User.findOne({ email }).lean() : null,
+      email ? SuperAdmin.findOne({ email }).lean() : null,
     ])
-    const requester = admin || user
+    const requester = admin || user || superAdmin
     const canViewAll = requester?.email?.toLowerCase() === 'chinenye.onyia@getpayedmail.com'
+    const isFinanceManager = requester?.email?.toLowerCase() === FINANCE_MANAGER_EMAIL
     const safeEmail = email ? email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : ''
     const managerQuery = email ? { departmentManager: { $regex: new RegExp('^' + safeEmail + '$', 'i') } } : null
 
     let query = { _id: { $in: [] } }
     if (canViewAll) {
       query = {}
-    } else if (admin) {
-      const users = await User.find({ createdBy: email }, 'email')
-      const emails = users.map((user) => user.email)
-      emails.push(email)
-      query = { $or: [{ submittedBy: { $in: emails } }, managerQuery] }
+    } else if (isFinanceManager) {
+      query = managerQuery || { _id: { $in: [] } }
+    } else if (admin || superAdmin) {
+      let userEmails = []
+      if (admin) {
+        const users = await User.find({ createdBy: email }, 'email').lean()
+        userEmails = users.map((u) => u.email)
+      }
+      userEmails.push(email)
+      const orClauses = [{ submittedBy: { $in: userEmails } }]
+      if (managerQuery) orClauses.push(managerQuery)
+      query = { $or: orClauses }
     } else if (email) {
-      query = { $or: [{ submittedBy: { $regex: new RegExp('^' + safeEmail + '$', 'i') } }, managerQuery] }
+      const orClauses = [{ submittedBy: { $regex: new RegExp('^' + safeEmail + '$', 'i') } }]
+      if (managerQuery) orClauses.push(managerQuery)
+      query = { $or: orClauses }
     }
 
-    const [leaves, admins] = await Promise.all([
-      LeaveRequest.find(query).sort({ createdAt: -1 }),
+    const leavesPromise = LeaveRequest.find(query).sort({ createdAt: -1 }).lean()
+    const [leaves, adminDocs, superAdminDocs] = await Promise.all([
+      leavesPromise,
       Admin.find({}, 'email').lean(),
+      SuperAdmin.find({}, 'email').lean(),
     ])
-    const adminEmails = new Set(admins.map((a) => a.email.toLowerCase()))
+    const adminEmails = new Set([
+      ...adminDocs.map((a) => a.email.toLowerCase()),
+      ...superAdminDocs.map((s) => s.email.toLowerCase()),
+    ])
     return res.json(leaves.map((leave) => {
-      const obj = { ...leave.toObject(), id: leave._id.toString() }
+      const obj = { ...leave, id: leave._id.toString() }
       obj.submitterIsAdmin = adminEmails.has(String(leave.submittedBy || '').toLowerCase())
       return obj
     }))
@@ -108,7 +126,7 @@ export const updateLeaveRequestStatus = async (req, res) => {
     const normalized = String(status).toLowerCase()
     if (normalized === 'approved' || normalized === 'declined') {
       try {
-        await sendLeaveStatusEmail(leave.toObject(), leave.status)
+        await sendLeaveStatusEmail(leave.toObject(), status)
       } catch (emailError) {
         console.error('Failed to send leave status email', emailError)
       }

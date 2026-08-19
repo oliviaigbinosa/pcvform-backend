@@ -47,19 +47,8 @@ export const getVouchers = async (req, res) => {
     let query
 
     if (isSuper) {
-      const superAdminEmails = await getAllSuperAdminEmails()
-      const saEmailsNormalized = superAdminEmails.map((e) => e.toLowerCase())
-      query = {
-        $or: [
-          { from: email },
-          { submittedBy: email },
-          { to: email },
-          { cc: email },
-          { to: FINANCE_EMAIL_LOWER },
-          { cc: FINANCE_EMAIL_LOWER },
-          { financeSuperAdminRecipients: { $in: [email, ...saEmailsNormalized] } },
-        ],
-      }
+      // Super admins should see all vouchers from all users, admins, super admins, and finance manager
+      query = {}
     } else if (account.constructor.modelName === 'Admin') {
       const users = await User.find({ createdBy: email }, 'email')
       const emails = users.map((u) => u.email)

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import Admin from '../models/Admin.js'
 import User from '../models/User.js'
 import SuperAdmin from '../models/SuperAdmin.js'
+import { FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
 import { sendMail } from './emailController.js'
 
 export const login = async (req, res) => {
@@ -19,13 +20,16 @@ export const login = async (req, res) => {
       User.findOne({ email: normalizedEmail })
     ])
 
+    const isFinanceManager = normalizedEmail === FINANCE_MANAGER_EMAIL
+
     // Check SuperAdmin first (highest priority)
     if (superAdmin) {
       const valid = await bcrypt.compare(password, superAdmin.password)
       if (!valid) {
         return res.status(401).json({ error: 'Invalid email or password' })
       }
-      return res.json({ email: superAdmin.email, role: superAdmin.role || 'super admin', department: superAdmin.department || '' })
+      const role = isFinanceManager ? 'super admin' : (superAdmin.role || 'super admin')
+      return res.json({ email: superAdmin.email, role, department: superAdmin.department || '' })
     }
 
     // Check Admin (regular admins only, not super admins)
@@ -34,7 +38,8 @@ export const login = async (req, res) => {
       if (!valid) {
         return res.status(401).json({ error: 'Invalid email or password' })
       }
-      return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
+      const role = isFinanceManager ? 'super admin' : (admin.role || 'admin')
+      return res.json({ email: admin.email, role, department: admin.department || '' })
     }
 
     // Check User
@@ -43,10 +48,11 @@ export const login = async (req, res) => {
       if (!valid) {
         return res.status(401).json({ error: 'Invalid email or password' })
       }
-
+      // Finance manager always gets admin-level access
+      const role = isFinanceManager ? 'super admin' : (user.role || 'user')
       return res.json({
         email: user.email,
-        role: user.role || 'user',
+        role,
         department: user.department || '',
         createdBy: user.createdBy || '',
       })
@@ -129,19 +135,24 @@ export const getMe = async (req, res) => {
       User.findOne({ email })
     ])
 
+    const isFinanceManager = email === FINANCE_MANAGER_EMAIL
+
     // Check SuperAdmin first
     if (superAdmin) {
-      return res.json({ email: superAdmin.email, role: superAdmin.role || 'super admin', department: superAdmin.department || '' })
+      const role = isFinanceManager ? 'super admin' : (superAdmin.role || 'super admin')
+      return res.json({ email: superAdmin.email, role, department: superAdmin.department || '' })
     }
 
     // Check Admin (regular admins only, not super admins)
     if (admin && admin.role !== 'super admin') {
-      return res.json({ email: admin.email, role: admin.role || 'admin', department: admin.department || '' })
+      const role = isFinanceManager ? 'super admin' : (admin.role || 'admin')
+      return res.json({ email: admin.email, role, department: admin.department || '' })
     }
 
     // Check User
     if (user) {
-      return res.json({ email: user.email, role: user.role || 'user', department: user.department || '', createdBy: user.createdBy || '' })
+      const role = isFinanceManager ? 'super admin' : (user.role || 'user')
+      return res.json({ email: user.email, role, department: user.department || '', createdBy: user.createdBy || '' })
     }
 
     return res.status(404).json({ error: 'User not found' })

@@ -26,12 +26,7 @@ export const listUsers = async (req, res) => {
     let admins = []
     let superAdmins = []
 
-    if (isFinanceManager) {
-      // Finance manager sees only finance department members they onboarded
-      users = await User.find({ createdBy: email, department: { $regex: new RegExp('^finance$', 'i') } }, '-password')
-      admins = await Admin.find({ createdBy: email, department: { $regex: new RegExp('^finance$', 'i') } }, '-password')
-      superAdmins = await SuperAdmin.find({ createdBy: email, department: { $regex: new RegExp('^finance$', 'i') } }, '-password')
-    } else if (isSuper) {
+    if (isFinanceManager || isSuper) {
       users = await User.find({}, '-password')
       admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password')
       superAdmins = await SuperAdmin.find({}, '-password')
@@ -90,13 +85,14 @@ export const createUser = async (req, res) => {
     const isAdmin = finalRole === 'admin' || finalRole === 'super admin'
     
     const isSuper = await isSuperAdminEmail(creator)
+    const isFinanceManager = creator === FINANCE_MANAGER_EMAIL
     
-    // Only super admins need to provide role (unless auto-assigned for Finance)
-    if (isSuper && !role && normalizedDepartment.toLowerCase() !== 'finance') {
+    // Only super admins / finance manager need to provide role (unless auto-assigned for Finance)
+    if ((isSuper || isFinanceManager) && !role && normalizedDepartment.toLowerCase() !== 'finance') {
       return res.status(400).json({ error: 'Role is required' })
     }
     
-    if (isAdmin && !isSuper) {
+    if (isAdmin && !isSuper && !isFinanceManager) {
       return res.status(403).json({ error: 'Only super admins can create admin accounts' })
     }
     
@@ -302,6 +298,7 @@ export const deleteUser = async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' })
     }
     const isSuper = await isSuperAdminEmail(requesterEmail)
+    const isFinanceManager = requesterEmail === FINANCE_MANAGER_EMAIL
 
     let user = await User.findById(req.params.id)
     if (!user) {
@@ -315,7 +312,7 @@ export const deleteUser = async (req, res) => {
     }
 
     const targetRole = user.role || 'user'
-    if (!isSuper) {
+    if (!isSuper && !isFinanceManager) {
       if (targetRole === 'admin' || targetRole === 'super admin') {
         return res.status(403).json({ error: 'Only super admins can delete admin accounts' })
       }

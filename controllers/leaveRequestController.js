@@ -23,42 +23,33 @@ export const getLeaveRequests = async (req, res) => {
     if (canViewAll) {
       query = {}
     } else if (isFinanceManager) {
-      // For finance manager, show leave requests from finance department members they onboarded
-      const financeOnboardedUsers = await User.find({ 
-        createdBy: email,
-        department: { $regex: new RegExp('^finance$', 'i') }
+      const financeUsers = await User.find({
+        department: { $regex: new RegExp('^finance$', 'i') },
       }, 'email').lean()
-      
-      const financeOnboardedAdmins = await Admin.find({ 
-        createdBy: email,
-        department: { $regex: new RegExp('^finance$', 'i') }
+      const financeAdmins = await Admin.find({
+        department: { $regex: new RegExp('^finance$', 'i') },
       }, 'email').lean()
-      
-      const financeOnboardedSuperAdmins = await SuperAdmin.find({ 
-        createdBy: email,
-        department: { $regex: new RegExp('^finance$', 'i') }
+      const financeSuperAdmins = await SuperAdmin.find({
+        department: { $regex: new RegExp('^finance$', 'i') },
       }, 'email').lean()
-      
-      const financeOnboardedEmails = new Set([
-        ...financeOnboardedUsers.map((u) => u.email.toLowerCase()),
-        ...financeOnboardedAdmins.map((a) => a.email.toLowerCase()),
-        ...financeOnboardedSuperAdmins.map((s) => s.email.toLowerCase()),
+      const financeEmails = new Set([
+        ...financeUsers.map((u) => u.email.toLowerCase()),
+        ...financeAdmins.map((a) => a.email.toLowerCase()),
+        ...financeSuperAdmins.map((s) => s.email.toLowerCase()),
+        email,
       ])
-      
       const orClauses = []
-      // Add leave requests from finance department members they onboarded
-      if (financeOnboardedEmails.size > 0) {
-        orClauses.push({ submittedBy: { $in: [...financeOnboardedEmails] } })
+      if (financeEmails.size > 0) {
+        orClauses.push({ submittedBy: { $in: [...financeEmails] } })
       }
-      // Also add leave requests where they are the department manager
       if (managerQuery) orClauses.push(managerQuery)
       query = orClauses.length > 0 ? { $or: orClauses } : { _id: { $in: [] } }
-    } else if (admin || superAdmin) {
-      let userEmails = []
-      if (admin) {
-        const users = await User.find({ createdBy: email }, 'email').lean()
-        userEmails = users.map((u) => u.email)
-      }
+    } else if (superAdmin) {
+      const orClauses = [{ submittedBy: { $regex: new RegExp('^' + safeEmail + '$', 'i') } }]
+      query = { $or: orClauses }
+    } else if (admin) {
+      const users = await User.find({ createdBy: email }, 'email').lean()
+      const userEmails = users.map((u) => u.email)
       userEmails.push(email)
       const orClauses = [{ submittedBy: { $in: userEmails } }]
       if (managerQuery) orClauses.push(managerQuery)

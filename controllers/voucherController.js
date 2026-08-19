@@ -8,6 +8,7 @@ import {
   isFinanceRoutedVoucher,
   isSuperAdminEmail,
   FINANCE_EMAIL,
+  FINANCE_MANAGER_EMAIL,
 } from '../utils/superAdmin.js'
 import {
   sendApprovedCcEmailInternal,
@@ -97,7 +98,17 @@ export const createVoucher = async (req, res) => {
 
     const payload = { ...req.body }
     if (isFinanceRoutedVoucher(payload)) {
-      payload.financeSuperAdminRecipients = await getAllSuperAdminEmails()
+      const sender = String(payload.submittedBy || payload.from || '').trim().toLowerCase()
+      const allSupers = await getAllSuperAdminEmails()
+      if (sender === FINANCE_MANAGER_EMAIL.toLowerCase()) {
+        payload.financeSuperAdminRecipients = [FINANCE_MANAGER_EMAIL.toLowerCase()]
+      } else {
+        const others = allSupers.filter((e) => String(e).toLowerCase() !== FINANCE_MANAGER_EMAIL.toLowerCase())
+        if (!others.includes(FINANCE_MANAGER_EMAIL.toLowerCase())) {
+          others.push(FINANCE_MANAGER_EMAIL.toLowerCase())
+        }
+        payload.financeSuperAdminRecipients = others
+      }
     }
 
     const voucher = await Voucher.create(payload)

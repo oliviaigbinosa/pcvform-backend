@@ -23,7 +23,36 @@ export const getLeaveRequests = async (req, res) => {
     if (canViewAll) {
       query = {}
     } else if (isFinanceManager) {
-      query = managerQuery || { _id: { $in: [] } }
+      // For finance manager, show leave requests from finance department members they onboarded
+      const financeOnboardedUsers = await User.find({ 
+        createdBy: email,
+        department: { $regex: new RegExp('^finance$', 'i') }
+      }, 'email').lean()
+      
+      const financeOnboardedAdmins = await Admin.find({ 
+        createdBy: email,
+        department: { $regex: new RegExp('^finance$', 'i') }
+      }, 'email').lean()
+      
+      const financeOnboardedSuperAdmins = await SuperAdmin.find({ 
+        createdBy: email,
+        department: { $regex: new RegExp('^finance$', 'i') }
+      }, 'email').lean()
+      
+      const financeOnboardedEmails = new Set([
+        ...financeOnboardedUsers.map((u) => u.email.toLowerCase()),
+        ...financeOnboardedAdmins.map((a) => a.email.toLowerCase()),
+        ...financeOnboardedSuperAdmins.map((s) => s.email.toLowerCase()),
+      ])
+      
+      const orClauses = []
+      // Add leave requests from finance department members they onboarded
+      if (financeOnboardedEmails.size > 0) {
+        orClauses.push({ submittedBy: { $in: [...financeOnboardedEmails] } })
+      }
+      // Also add leave requests where they are the department manager
+      if (managerQuery) orClauses.push(managerQuery)
+      query = orClauses.length > 0 ? { $or: orClauses } : { _id: { $in: [] } }
     } else if (admin || superAdmin) {
       let userEmails = []
       if (admin) {

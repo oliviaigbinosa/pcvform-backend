@@ -20,12 +20,18 @@ export const listUsers = async (req, res) => {
   try {
     const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
     const isSuper = await isSuperAdminEmail(email)
+    const isFinanceManager = email === FINANCE_MANAGER_EMAIL
 
     let users = []
     let admins = []
     let superAdmins = []
 
-    if (isSuper) {
+    if (isFinanceManager) {
+      // Finance manager sees only finance department members they onboarded
+      users = await User.find({ createdBy: email, department: { $regex: new RegExp('^finance$', 'i') } }, '-password')
+      admins = await Admin.find({ createdBy: email, department: { $regex: new RegExp('^finance$', 'i') } }, '-password')
+      superAdmins = await SuperAdmin.find({ createdBy: email, department: { $regex: new RegExp('^finance$', 'i') } }, '-password')
+    } else if (isSuper) {
       users = await User.find({}, '-password')
       admins = await Admin.find({ role: { $ne: 'super admin' } }, '-password')
       superAdmins = await SuperAdmin.find({}, '-password')

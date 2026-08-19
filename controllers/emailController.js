@@ -119,13 +119,22 @@ function buildVoucherEmailText({
   return `${heading}\n${'═'.repeat(52)}\nVoucher No.:      ${voucherNo}\nCompany:          Getpayed Technology Solutions Ltd.\nSubmitted By:     ${submittedBy || from}\n\nEMAIL DETAILS\n${'─'.repeat(52)}\nFrom:             ${formatDisplay(from)}\nTo:               ${formatDisplay(to)}${ccLine}\nSubject:          ${subject}\n\nPAYEE INFORMATION\n${'─'.repeat(52)}\nPayee:            ${payee || ''}\nDepartment:       ${department || ''}\n\nAMOUNT & PURPOSE\n${'─'.repeat(52)}\nAmount (Figures): ₦${formattedAmount}${amountWords != null ? `\nAmount (Words):   ${amountWords || ''}` : ''}\n\nPurpose / Description:\n${purpose || ''}\n\nSUPPORTING DOCUMENTS\n${'─'.repeat(52)}\nSubmission Date:  ${submissionDate}\nAttached Files:\n${docs}\n\n${'═'.repeat(52)}\n${footer}${buildStatusLines({ approvedBy, declinedBy, processedBy, status })}`
 }
 
-async function getFinanceAwareRecipients(to, cc) {
+async function getFinanceAwareRecipients(to, cc, from) {
   const recipients = new Set()
   const normalizedTo = String(to || '').trim().toLowerCase()
   const normalizedCc = String(cc || '').trim().toLowerCase()
+  const normalizedFrom = String(from || '').trim().toLowerCase()
 
   if (normalizedTo) recipients.add(normalizedTo)
   if (normalizedCc) recipients.add(normalizedCc)
+
+  // Special handling for finance manager submitting vouchers
+  // When finance manager sends to finance@getpayedmail.com, send to all super admins
+  if (normalizedTo === FINANCE_EMAIL && normalizedFrom === FINANCE_MANAGER_EMAIL) {
+    const superAdminEmails = await getAllSuperAdminEmails()
+    superAdminEmails.forEach((email) => recipients.add(email))
+    return [...recipients]
+  }
 
   const financeRouted =
     normalizedTo === FINANCE_EMAIL || normalizedCc === FINANCE_EMAIL
@@ -488,7 +497,7 @@ export const sendVoucherEmail = async (req, res) => {
       return res.status(400).json({ error: 'Missing required email fields' })
     }
 
-    const recipientEmails = await getFinanceAwareRecipients(to, cc)
+    const recipientEmails = await getFinanceAwareRecipients(to, cc, from)
     for (const recipient of recipientEmails) {
       if (!isAllowedRecipient(recipient)) {
         return res.status(400).json({ error: 'All recipient emails must be @getpayedmail.com or @resend.dev addresses' })

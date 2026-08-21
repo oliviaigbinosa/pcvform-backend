@@ -91,12 +91,26 @@ export const createVoucher = async (req, res) => {
       return res.status(400).json({ error: 'Missing required voucher fields' })
     }
 
-    const existing = await Voucher.findOne({ id })
+    // Generate correct voucher serial number based on actual database count
+    const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
+    const currentYear = new Date().getFullYear()
+    const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
+    
+    // Count vouchers for this department, year, and month
+    const voucherCount = await Voucher.countDocuments({
+      id: new RegExp(`^PCV/${deptSlug}/${currentYear}/${currentMonth}/`)
+    })
+    const serial = String(voucherCount + 1).padStart(3, '0')
+    const correctVoucherId = `PCV/${deptSlug}/${currentYear}/${currentMonth}/${serial}`
+
+    // Use the backend-generated voucher ID instead of the frontend one
+    const payload = { ...req.body, id: correctVoucherId }
+
+    const existing = await Voucher.findOne({ id: correctVoucherId })
     if (existing) {
       return res.status(409).json({ error: 'Voucher with this ID already exists' })
     }
 
-    const payload = { ...req.body }
     if (isFinanceRoutedVoucher(payload)) {
       const sender = String(payload.submittedBy || payload.from || '').trim().toLowerCase()
       const allSupers = await getAllSuperAdminEmails()

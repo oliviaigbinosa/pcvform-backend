@@ -157,8 +157,10 @@ export const updateVoucherStatus = async (req, res) => {
     const update = { status }
     if (status === 'Approved') {
       update.approvedBy = updater
-    } else if (status === 'Declined' || status === 'Rejected') {
+    } else if (status === 'Declined') {
       update.declinedBy = updater
+    } else if (status === 'Rejected') {
+      update.rejectedBy = updater
     } else if (status === 'Processed') {
       update.processedBy = updater
     }

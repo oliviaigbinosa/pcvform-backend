@@ -25,6 +25,7 @@ const voucherSchema = new mongoose.Schema({
   approvedBy: { type: String },
   declinedBy: { type: String },
   processedBy: { type: String },
+  rejectedBy: { type: String },
   financeSuperAdminRecipients: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now },
 })

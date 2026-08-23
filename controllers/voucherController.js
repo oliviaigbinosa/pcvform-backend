@@ -19,6 +19,30 @@ import {
 
 const FINANCE_EMAIL_LOWER = FINANCE_EMAIL.toLowerCase()
 
+async function generateNextVoucherId(department) {
+  const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
+  const currentYear = new Date().getFullYear()
+  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
+  const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
+
+  // Find the highest existing serial number for this department/year/month combination
+  const lastVoucher = await Voucher.findOne({
+    id: new RegExp(`^${prefix}`)
+  }).sort({ id: -1 }).lean()
+
+  let nextSerial = 1
+  if (lastVoucher && lastVoucher.id) {
+    const lastSerial = lastVoucher.id.split('/').pop()
+    const lastSerialNum = parseInt(lastSerial, 10)
+    if (!isNaN(lastSerialNum)) {
+      nextSerial = lastSerialNum + 1
+    }
+  }
+
+  const serial = String(nextSerial).padStart(3, '0')
+  return `${prefix}${serial}`
+}
+
 async function enrichVoucher(voucher) {
   const admin = await Admin.findOne({
     email: String(voucher.submittedBy || voucher.from).toLowerCase(),
@@ -91,29 +115,8 @@ export const createVoucher = async (req, res) => {
       return res.status(400).json({ error: 'Missing required voucher fields' })
     }
 
-    // Generate correct voucher serial number based on actual database count
-    const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
-    const currentYear = new Date().getFullYear()
-    const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
-    const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
-
-    // Find the highest existing serial number for this department/year/month combination
-    // This uses an atomic operation to prevent race conditions
-    const lastVoucher = await Voucher.findOne({
-      id: new RegExp(`^${prefix}`)
-    }).sort({ id: -1 }).lean()
-
-    let nextSerial = 1
-    if (lastVoucher && lastVoucher.id) {
-      const lastSerial = lastVoucher.id.split('/').pop()
-      const lastSerialNum = parseInt(lastSerial, 10)
-      if (!isNaN(lastSerialNum)) {
-        nextSerial = lastSerialNum + 1
-      }
-    }
-
-    const serial = String(nextSerial).padStart(3, '0')
-    const correctVoucherId = `${prefix}${serial}`
+    // Generate correct voucher serial number using the shared function
+    const correctVoucherId = await generateNextVoucherId(department)
 
     // Use the backend-generated voucher ID instead of the frontend one
     const payload = { ...req.body, id: correctVoucherId }
@@ -148,6 +151,21 @@ export const createVoucher = async (req, res) => {
       return res.status(409).json({ error: 'Voucher with this ID already exists' })
     }
     return res.status(500).json({ error: 'Failed to create voucher' })
+  }
+}
+
+export const getNextVoucherNumber = async (req, res) => {
+  try {
+    const { department } = req.query
+    if (!department) {
+      return res.status(400).json({ error: 'Department is required' })
+    }
+
+    const nextVoucherId = await generateNextVoucherId(department)
+    return res.json({ nextVoucherId })
+  } catch (error) {
+    console.error('Failed to get next voucher number', error)
+    return res.status(500).json({ error: 'Failed to get next voucher number' })
   }
 }
 

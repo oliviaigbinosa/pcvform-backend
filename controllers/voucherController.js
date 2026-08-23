@@ -19,82 +19,6 @@ import {
 
 const FINANCE_EMAIL_LOWER = FINANCE_EMAIL.toLowerCase()
 
-async function generateNextVoucherId(department) {
-  const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
-  const currentYear = new Date().getFullYear()
-  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
-  const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
-
-  // Find all vouchers with this prefix, sort by ID descending to get the highest number
-  const allVouchers = await Voucher.find({
-    id: { $regex: `^${prefix}`, $options: 'i' }
-  }).lean()
-
-  let maxSerial = 0
-  for (const voucher of allVouchers) {
-    if (voucher.id) {
-      const serial = voucher.id.split('/').pop()
-      const serialNum = parseInt(serial, 10)
-      if (!isNaN(serialNum) && serialNum > maxSerial) {
-        maxSerial = serialNum
-      }
-    }
-  }
-
-  const nextSerial = maxSerial + 1
-  const serial = String(nextSerial).padStart(3, '0')
-  return `${prefix}${serial}`
-}
-
-async function createVoucherWithRetry(department, payload, maxRetries = 10) {
-  const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
-  const currentYear = new Date().getFullYear()
-  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
-  const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
-
-  // Find all vouchers with this prefix to get the maximum serial number
-  const allVouchers = await Voucher.find({
-    id: { $regex: `^${prefix}`, $options: 'i' }
-  }).lean()
-
-  let maxSerial = 0
-  for (const voucher of allVouchers) {
-    if (voucher.id) {
-      const serial = voucher.id.split('/').pop()
-      const serialNum = parseInt(serial, 10)
-      if (!isNaN(serialNum) && serialNum > maxSerial) {
-        maxSerial = serialNum
-      }
-    }
-  }
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const nextSerial = maxSerial + 1 + attempt
-    const serial = String(nextSerial).padStart(3, '0')
-    const correctVoucherId = `${prefix}${serial}`
-
-    // Check if this ID already exists
-    const existing = await Voucher.findOne({ id: correctVoucherId })
-    if (existing) {
-      continue // Try the next number
-    }
-
-    // Try to create with this ID
-    try {
-      const voucher = await Voucher.create({ ...payload, id: correctVoucherId })
-      return voucher
-    } catch (error) {
-      if (error.code === 11000) {
-        // Duplicate key error, try next number
-        continue
-      }
-      throw error // Re-throw other errors
-    }
-  }
-
-  throw new Error('Failed to generate unique voucher ID after multiple attempts')
-}
-
 async function enrichVoucher(voucher) {
   const admin = await Admin.findOne({
     email: String(voucher.submittedBy || voucher.from).toLowerCase(),
@@ -167,9 +91,25 @@ export const createVoucher = async (req, res) => {
       return res.status(400).json({ error: 'Missing required voucher fields' })
     }
 
-    // Prepare payload without the ID (will be set by createVoucherWithRetry)
-    const payload = { ...req.body }
-    delete payload.id
+    // Generate correct voucher serial number based on actual database count
+    const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
+    const currentYear = new Date().getFullYear()
+    const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
+    
+    // Count vouchers for this department, year, and month
+    const voucherCount = await Voucher.countDocuments({
+      id: new RegExp(`^PCV/${deptSlug}/${currentYear}/${currentMonth}/`)
+    })
+    const serial = String(voucherCount + 1).padStart(3, '0')
+    const correctVoucherId = `PCV/${deptSlug}/${currentYear}/${currentMonth}/${serial}`
+
+    // Use the backend-generated voucher ID instead of the frontend one
+    const payload = { ...req.body, id: correctVoucherId }
+
+    const existing = await Voucher.findOne({ id: correctVoucherId })
+    if (existing) {
+      return res.status(409).json({ error: 'Voucher with this ID already exists' })
+    }
 
     if (isFinanceRoutedVoucher(payload)) {
       const sender = String(payload.submittedBy || payload.from || '').trim().toLowerCase()
@@ -185,32 +125,12 @@ export const createVoucher = async (req, res) => {
       }
     }
 
-    // Create voucher with retry logic to handle race conditions
-    const voucher = await createVoucherWithRetry(department, payload)
+    const voucher = await Voucher.create(payload)
     const result = await enrichVoucher(voucher.toObject())
     return res.status(201).json(result)
   } catch (error) {
     console.error('Failed to create voucher', error)
-    if (error.code === 11000) {
-      // MongoDB duplicate key error
-      return res.status(409).json({ error: 'Voucher with this ID already exists' })
-    }
     return res.status(500).json({ error: 'Failed to create voucher' })
-  }
-}
-
-export const getNextVoucherNumber = async (req, res) => {
-  try {
-    const { department } = req.query
-    if (!department) {
-      return res.status(400).json({ error: 'Department is required' })
-    }
-
-    const nextVoucherId = await generateNextVoucherId(department)
-    return res.json({ nextVoucherId })
-  } catch (error) {
-    console.error('Failed to get next voucher number', error)
-    return res.status(500).json({ error: 'Failed to get next voucher number' })
   }
 }
 

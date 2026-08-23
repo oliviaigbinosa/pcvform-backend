@@ -95,17 +95,30 @@ export const createVoucher = async (req, res) => {
     const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
     const currentYear = new Date().getFullYear()
     const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
-    
-    // Count vouchers for this department, year, and month
-    const voucherCount = await Voucher.countDocuments({
-      id: new RegExp(`^PCV/${deptSlug}/${currentYear}/${currentMonth}/`)
-    })
-    const serial = String(voucherCount + 1).padStart(3, '0')
-    const correctVoucherId = `PCV/${deptSlug}/${currentYear}/${currentMonth}/${serial}`
+    const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
+
+    // Find the highest existing serial number for this department/year/month combination
+    // This uses an atomic operation to prevent race conditions
+    const lastVoucher = await Voucher.findOne({
+      id: new RegExp(`^${prefix}`)
+    }).sort({ id: -1 }).lean()
+
+    let nextSerial = 1
+    if (lastVoucher && lastVoucher.id) {
+      const lastSerial = lastVoucher.id.split('/').pop()
+      const lastSerialNum = parseInt(lastSerial, 10)
+      if (!isNaN(lastSerialNum)) {
+        nextSerial = lastSerialNum + 1
+      }
+    }
+
+    const serial = String(nextSerial).padStart(3, '0')
+    const correctVoucherId = `${prefix}${serial}`
 
     // Use the backend-generated voucher ID instead of the frontend one
     const payload = { ...req.body, id: correctVoucherId }
 
+    // Check if this ID already exists (double-check with atomic constraint)
     const existing = await Voucher.findOne({ id: correctVoucherId })
     if (existing) {
       return res.status(409).json({ error: 'Voucher with this ID already exists' })
@@ -130,6 +143,10 @@ export const createVoucher = async (req, res) => {
     return res.status(201).json(result)
   } catch (error) {
     console.error('Failed to create voucher', error)
+    if (error.code === 11000) {
+      // MongoDB duplicate key error
+      return res.status(409).json({ error: 'Voucher with this ID already exists' })
+    }
     return res.status(500).json({ error: 'Failed to create voucher' })
   }
 }

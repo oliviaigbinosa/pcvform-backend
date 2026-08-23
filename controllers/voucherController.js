@@ -43,6 +43,52 @@ async function generateNextVoucherId(department) {
   return `${prefix}${serial}`
 }
 
+async function createVoucherWithRetry(department, payload, maxRetries = 10) {
+  const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
+  const currentYear = new Date().getFullYear()
+  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
+  const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
+
+  // Find the highest existing serial number for this department/year/month combination
+  const lastVoucher = await Voucher.findOne({
+    id: new RegExp(`^${prefix}`)
+  }).sort({ id: -1 }).lean()
+
+  let nextSerial = 1
+  if (lastVoucher && lastVoucher.id) {
+    const lastSerial = lastVoucher.id.split('/').pop()
+    const lastSerialNum = parseInt(lastSerial, 10)
+    if (!isNaN(lastSerialNum)) {
+      nextSerial = lastSerialNum + 1
+    }
+  }
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const serial = String(nextSerial + attempt).padStart(3, '0')
+    const correctVoucherId = `${prefix}${serial}`
+
+    // Check if this ID already exists
+    const existing = await Voucher.findOne({ id: correctVoucherId })
+    if (existing) {
+      continue // Try the next number
+    }
+
+    // Try to create with this ID
+    try {
+      const voucher = await Voucher.create({ ...payload, id: correctVoucherId })
+      return voucher
+    } catch (error) {
+      if (error.code === 11000) {
+        // Duplicate key error, try next number
+        continue
+      }
+      throw error // Re-throw other errors
+    }
+  }
+
+  throw new Error('Failed to generate unique voucher ID after multiple attempts')
+}
+
 async function enrichVoucher(voucher) {
   const admin = await Admin.findOne({
     email: String(voucher.submittedBy || voucher.from).toLowerCase(),
@@ -115,17 +161,9 @@ export const createVoucher = async (req, res) => {
       return res.status(400).json({ error: 'Missing required voucher fields' })
     }
 
-    // Generate correct voucher serial number using the shared function
-    const correctVoucherId = await generateNextVoucherId(department)
-
-    // Use the backend-generated voucher ID instead of the frontend one
-    const payload = { ...req.body, id: correctVoucherId }
-
-    // Check if this ID already exists (double-check with atomic constraint)
-    const existing = await Voucher.findOne({ id: correctVoucherId })
-    if (existing) {
-      return res.status(409).json({ error: 'Voucher with this ID already exists' })
-    }
+    // Prepare payload without the ID (will be set by createVoucherWithRetry)
+    const payload = { ...req.body }
+    delete payload.id
 
     if (isFinanceRoutedVoucher(payload)) {
       const sender = String(payload.submittedBy || payload.from || '').trim().toLowerCase()
@@ -141,7 +179,8 @@ export const createVoucher = async (req, res) => {
       }
     }
 
-    const voucher = await Voucher.create(payload)
+    // Create voucher with retry logic to handle race conditions
+    const voucher = await createVoucherWithRetry(department, payload)
     const result = await enrichVoucher(voucher.toObject())
     return res.status(201).json(result)
   } catch (error) {

@@ -25,20 +25,23 @@ async function generateNextVoucherId(department) {
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
   const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
 
-  // Find all vouchers with this prefix and get the highest serial number
-  const vouchers = await Voucher.find({
+  // Find all vouchers with this prefix, sort by ID descending to get the highest number
+  const allVouchers = await Voucher.find({
     id: { $regex: `^${prefix}`, $options: 'i' }
-  }).sort({ id: -1 }).limit(1).lean()
+  }).lean()
 
-  let nextSerial = 1
-  if (vouchers.length > 0 && vouchers[0].id) {
-    const lastSerial = vouchers[0].id.split('/').pop()
-    const lastSerialNum = parseInt(lastSerial, 10)
-    if (!isNaN(lastSerialNum)) {
-      nextSerial = lastSerialNum + 1
+  let maxSerial = 0
+  for (const voucher of allVouchers) {
+    if (voucher.id) {
+      const serial = voucher.id.split('/').pop()
+      const serialNum = parseInt(serial, 10)
+      if (!isNaN(serialNum) && serialNum > maxSerial) {
+        maxSerial = serialNum
+      }
     }
   }
 
+  const nextSerial = maxSerial + 1
   const serial = String(nextSerial).padStart(3, '0')
   return `${prefix}${serial}`
 }
@@ -49,22 +52,25 @@ async function createVoucherWithRetry(department, payload, maxRetries = 10) {
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
   const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
 
-  // Find all vouchers with this prefix and get the highest serial number
-  const vouchers = await Voucher.find({
+  // Find all vouchers with this prefix to get the maximum serial number
+  const allVouchers = await Voucher.find({
     id: { $regex: `^${prefix}`, $options: 'i' }
-  }).sort({ id: -1 }).limit(1).lean()
+  }).lean()
 
-  let nextSerial = 1
-  if (vouchers.length > 0 && vouchers[0].id) {
-    const lastSerial = vouchers[0].id.split('/').pop()
-    const lastSerialNum = parseInt(lastSerial, 10)
-    if (!isNaN(lastSerialNum)) {
-      nextSerial = lastSerialNum + 1
+  let maxSerial = 0
+  for (const voucher of allVouchers) {
+    if (voucher.id) {
+      const serial = voucher.id.split('/').pop()
+      const serialNum = parseInt(serial, 10)
+      if (!isNaN(serialNum) && serialNum > maxSerial) {
+        maxSerial = serialNum
+      }
     }
   }
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const serial = String(nextSerial + attempt).padStart(3, '0')
+    const nextSerial = maxSerial + 1 + attempt
+    const serial = String(nextSerial).padStart(3, '0')
     const correctVoucherId = `${prefix}${serial}`
 
     // Check if this ID already exists

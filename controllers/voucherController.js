@@ -25,14 +25,14 @@ async function generateNextVoucherId(department) {
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
   const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
 
-  // Find the highest existing serial number for this department/year/month combination
-  const lastVoucher = await Voucher.findOne({
-    id: new RegExp(`^${prefix}`)
-  }).sort({ id: -1 }).lean()
+  // Find all vouchers with this prefix and get the highest serial number
+  const vouchers = await Voucher.find({
+    id: { $regex: `^${prefix}`, $options: 'i' }
+  }).sort({ id: -1 }).limit(1).lean()
 
   let nextSerial = 1
-  if (lastVoucher && lastVoucher.id) {
-    const lastSerial = lastVoucher.id.split('/').pop()
+  if (vouchers.length > 0 && vouchers[0].id) {
+    const lastSerial = vouchers[0].id.split('/').pop()
     const lastSerialNum = parseInt(lastSerial, 10)
     if (!isNaN(lastSerialNum)) {
       nextSerial = lastSerialNum + 1
@@ -49,14 +49,14 @@ async function createVoucherWithRetry(department, payload, maxRetries = 10) {
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
   const prefix = `PCV/${deptSlug}/${currentYear}/${currentMonth}/`
 
-  // Find the highest existing serial number for this department/year/month combination
-  const lastVoucher = await Voucher.findOne({
-    id: new RegExp(`^${prefix}`)
-  }).sort({ id: -1 }).lean()
+  // Find all vouchers with this prefix and get the highest serial number
+  const vouchers = await Voucher.find({
+    id: { $regex: `^${prefix}`, $options: 'i' }
+  }).sort({ id: -1 }).limit(1).lean()
 
   let nextSerial = 1
-  if (lastVoucher && lastVoucher.id) {
-    const lastSerial = lastVoucher.id.split('/').pop()
+  if (vouchers.length > 0 && vouchers[0].id) {
+    const lastSerial = vouchers[0].id.split('/').pop()
     const lastSerialNum = parseInt(lastSerial, 10)
     if (!isNaN(lastSerialNum)) {
       nextSerial = lastSerialNum + 1

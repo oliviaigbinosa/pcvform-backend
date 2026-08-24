@@ -91,15 +91,12 @@ export const createVoucher = async (req, res) => {
       return res.status(400).json({ error: 'Missing required voucher fields' })
     }
 
-    // Generate correct voucher serial number based on actual database count
+    // Generate correct voucher serial number based on global database count
     const deptSlug = String(department || '').trim().toUpperCase().replace(/\s+/g, '-') || 'DEPT'
     const currentYear = new Date().getFullYear()
     const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
     
-    // Count vouchers for this department, year, and month
-    const voucherCount = await Voucher.countDocuments({
-      id: new RegExp(`^PCV/${deptSlug}/${currentYear}/${currentMonth}/`)
-    })
+    const voucherCount = await Voucher.countDocuments()
     const serial = String(voucherCount + 1).padStart(3, '0')
     const correctVoucherId = `PCV/${deptSlug}/${currentYear}/${currentMonth}/${serial}`
 
@@ -131,6 +128,18 @@ export const createVoucher = async (req, res) => {
   } catch (error) {
     console.error('Failed to create voucher', error)
     return res.status(500).json({ error: 'Failed to create voucher' })
+  }
+}
+
+export const getNextSerial = async (req, res) => {
+  try {
+    const voucherCount = await Voucher.countDocuments()
+    const serial = String(voucherCount + 1).padStart(3, '0')
+    
+    return res.json({ serial })
+  } catch (error) {
+    console.error('Failed to get next serial', error)
+    return res.status(500).json({ error: 'Failed to get next serial' })
   }
 }
 

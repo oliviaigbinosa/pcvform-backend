@@ -603,7 +603,7 @@ export const sendLeaveRequestEmail = async (leave) => {
 
   const heading = 'LEAVE REQUEST SUBMITTED'
 
-  const text = `${heading}\n${'═'.repeat(49)}\nEmployee Name:    ${employeeName || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\n\n\n\n\n\n\n\nSubmitted By:     ${submittedBy || ''}\n`
+  const text = `${heading}\n${'═'.repeat(49)}\nEmployee Name:    ${employeeName || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\n\n\n\n\n\n\n\nSubmitted By:     ${submittedBy || ''}\nTo:              ${departmentManager || ''}\n`
 
   const html = `<div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
   <p style="margin: 0 0 4px 0; font-weight: bold; font-size: 16px;">${escapeHtml(heading)}</p>
@@ -618,6 +618,7 @@ export const sendLeaveRequestEmail = async (leave) => {
   <p style="margin: 16px 0 4px 0; font-size: 16px;"><strong style="font-size: 16px;">Attachments:</strong></p>
   <div style="padding-left: 12px; font-size: 16px; white-space: pre-wrap;">${escapeHtml(docs)}</div>
   <p style="margin: 48px 0 4px 0; font-size: 16px;"><strong style="font-size: 16px;">Submitted By:</strong> ${escapeHtml(submittedBy)}</p>
+  <p style="margin: 4px 0; font-size: 16px;"><strong style="font-size: 16px;">To:</strong> ${escapeHtml(departmentManager)}</p>
 </div>`
 
   const info = await sendMail({

@@ -634,7 +634,7 @@ export const sendLeaveRequestEmail = async (leave) => {
 }
 
 export const sendLeaveStatusEmail = async (leave, status) => {
-  const { employeeName, submittedBy: email, department, leaveType, startDate, endDate, reason, attachments } = leave
+  const { employeeName, submittedBy: email, department, leaveType, startDate, endDate, reason, attachments, departmentManager } = leave
   const actualStatus = String(status || leave.status || '').toLowerCase() || 'status update'
 
   if (!email) {
@@ -672,7 +672,7 @@ export const sendLeaveStatusEmail = async (leave, status) => {
   const statusCapitalized = actualStatus.charAt(0).toUpperCase() + actualStatus.slice(1)
   const heading = `LEAVE REQUEST ${statusCapitalized.toUpperCase()}`
 
-  const text = `${heading}\n${'═'.repeat(49)}\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\n\n\n\n\n\nYour leave request has been ${actualStatus}\n`
+  const text = `${heading}\n${'═'.repeat(49)}\nEmployee Name:    ${employeeName || ''}\nEmail:            ${email || ''}\nDepartment:       ${department || ''}\nLeave Type:       ${leaveType || ''}\nStart Date:       ${startDate || ''}\nEnd Date:         ${endDate || ''}\n\nReason:\n${reason || ''}\n\nAttachments:\n${docs}\n\n\n\n\n\n\n\nYour leave request has been ${actualStatus} by ${departmentManager || ''}\n`
 
   const html = `<div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333;">
   <p style="margin: 0 0 4px 0; font-weight: bold; font-size: 16px;">${escapeHtml(heading)}</p>
@@ -688,7 +688,7 @@ export const sendLeaveStatusEmail = async (leave, status) => {
   <p style="margin: 16px 0 4px 0; font-size: 16px;"><strong style="font-size: 16px;">Attachments:</strong></p>
   <div style="padding-left: 12px; font-size: 16px; white-space: pre-wrap;">${escapeHtml(docs)}</div>
   <br><br>
-  <p style="margin: 24px 0 16px 0; font-size: 16px;"><em style="font-size: 16px;">Your leave request has been ${escapeHtml(actualStatus)}</em></p>
+  <p style="margin: 24px 0 16px 0; font-size: 16px;"><em style="font-size: 16px;">Your leave request has been ${escapeHtml(actualStatus)} by ${escapeHtml(departmentManager)}</em></p>
 </div>`
 
   const subject = `Leave Request ${statusCapitalized}`

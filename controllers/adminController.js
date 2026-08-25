@@ -266,8 +266,9 @@ export const validateManagerEmail = async (req, res) => {
           : 'user')
 
     const isTargetAdminOrSuper = targetRole === 'admin' || targetRole === 'super admin'
+    const isFinanceManager = targetEmail === FINANCE_MANAGER_EMAIL
 
-    if (!isTargetAdminOrSuper) {
+    if (!isTargetAdminOrSuper && !isFinanceManager) {
       return res.json({
         valid: false,
         error: 'This user is not a department manager',

@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
 import { connectDb, seedAdmin } from './config/database.js'
 import authRoutes from './routes/authRoutes.js'
@@ -11,7 +12,14 @@ import leaveRequestRoutes from './routes/leaveRequestRoutes.js'
 dotenv.config()
 
 const app = express()
-app.use(cors())
+
+// Configure CORS to allow credentials
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}))
+
+app.use(cookieParser())
 app.use(express.json({ limit: '10mb' }))
 
 app.use('/api/auth', authRoutes)

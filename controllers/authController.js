@@ -5,7 +5,6 @@ import User from '../models/User.js'
 import SuperAdmin from '../models/SuperAdmin.js'
 import { FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
 import { sendMail } from './emailController.js'
-import { generateToken } from '../middleware/auth.js'
 
 export const login = async (req, res) => {
   try {
@@ -30,17 +29,7 @@ export const login = async (req, res) => {
         return res.status(401).json({ error: 'Invalid email or password' })
       }
       const role = isFinanceManager ? 'super admin' : (superAdmin.role || 'super admin')
-      const token = generateToken({ email: superAdmin.email, role, department: superAdmin.department || '' })
-      
-      // Set httpOnly cookie
-      res.cookie('auth_token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 1000 // 1 hour
-      })
-      
-      return res.json({ email: superAdmin.email, role, department: superAdmin.department || '', token })
+      return res.json({ email: superAdmin.email, role, department: superAdmin.department || '' })
     }
 
     // Check Admin (regular admins only, not super admins)
@@ -50,17 +39,7 @@ export const login = async (req, res) => {
         return res.status(401).json({ error: 'Invalid email or password' })
       }
       const role = isFinanceManager ? 'super admin' : (admin.role || 'admin')
-      const token = generateToken({ email: admin.email, role, department: admin.department || '' })
-      
-      // Set httpOnly cookie
-      res.cookie('auth_token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 1000 // 1 hour
-      })
-      
-      return res.json({ email: admin.email, role, department: admin.department || '', token })
+      return res.json({ email: admin.email, role, department: admin.department || '' })
     }
 
     // Check User
@@ -71,27 +50,11 @@ export const login = async (req, res) => {
       }
       // Finance manager always gets admin-level access
       const role = isFinanceManager ? 'super admin' : (user.role || 'user')
-      const token = generateToken({ 
-        email: user.email, 
-        role, 
-        department: user.department || '', 
-        createdBy: user.createdBy || '' 
-      })
-      
-      // Set httpOnly cookie
-      res.cookie('auth_token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 1000 // 1 hour
-      })
-      
       return res.json({
         email: user.email,
         role,
         department: user.department || '',
         createdBy: user.createdBy || '',
-        token
       })
     }
 
@@ -161,14 +124,7 @@ export const changePassword = async (req, res) => {
 
 export const getMe = async (req, res) => {
   try {
-    // Try to get email from JWT token first, then fall back to header
-    let email
-    if (req.user && req.user.email) {
-      email = req.user.email
-    } else {
-      email = String(req.headers['x-user-email'] || '').trim().toLowerCase()
-    }
-    
+    const email = String(req.headers['x-user-email'] || '').trim().toLowerCase()
     if (!email) {
       return res.status(401).json({ error: 'Email required' })
     }
@@ -316,20 +272,5 @@ export const resetPassword = async (req, res) => {
   } catch (error) {
     console.error('Reset password failed', error)
     return res.status(500).json({ error: 'Failed to reset password' })
-  }
-}
-
-export const logout = async (req, res) => {
-  try {
-    // Clear the auth cookie
-    res.clearCookie('auth_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict'
-    })
-    return res.json({ ok: true })
-  } catch (error) {
-    console.error('Logout failed', error)
-    return res.status(500).json({ error: 'Failed to logout' })
   }
 }

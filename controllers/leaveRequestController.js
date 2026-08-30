@@ -46,6 +46,7 @@ export const getLeaveRequests = async (req, res) => {
       query = orClauses.length > 0 ? { $or: orClauses } : { _id: { $in: [] } }
     } else if (superAdmin) {
       const orClauses = [{ submittedBy: { $regex: new RegExp('^' + safeEmail + '$', 'i') } }]
+      if (managerQuery) orClauses.push(managerQuery)
       query = { $or: orClauses }
     } else if (admin) {
       const users = await User.find({ createdBy: email }, 'email').lean()

@@ -182,15 +182,9 @@ export const listAdminEmails = async (req, res) => {
     if (role !== 'admin' && role !== 'super admin') {
       return res.status(403).json({ error: 'Admin access required' })
     }
-    const [admins, superAdmins] = await Promise.all([
-      Admin.find({}, 'email').lean(),
-      SuperAdmin.find({}, 'email').lean(),
-    ])
-    const allEmails = [
-      ...admins.map((admin) => admin.email.toLowerCase()),
-      ...superAdmins.map((sa) => sa.email.toLowerCase()),
-    ]
-    return res.json([...new Set(allEmails)])
+    const admins = await Admin.find({}, 'email').lean()
+    const adminEmails = admins.map((admin) => admin.email.toLowerCase())
+    return res.json([...new Set(adminEmails)])
   } catch (error) {
     console.error('Failed to list admin emails', error)
     return res.status(500).json({ error: 'Failed to list admin emails' })
@@ -265,10 +259,10 @@ export const validateManagerEmail = async (req, res) => {
           ? 'admin'
           : 'user')
 
-    const isTargetAdminOrSuper = targetRole === 'admin' || targetRole === 'super admin'
+    const isTargetAdmin = targetRole === 'admin'
     const isFinanceManager = targetEmail === FINANCE_MANAGER_EMAIL
 
-    if (!isTargetAdminOrSuper && !isFinanceManager) {
+    if (!isTargetAdmin && !isFinanceManager) {
       return res.json({
         valid: false,
         error: 'This user is not a department manager',

@@ -5,6 +5,7 @@ import User from '../models/User.js'
 import SuperAdmin from '../models/SuperAdmin.js'
 import { FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
 import { sendMail } from './emailController.js'
+import { generateToken } from '../middleware/auth.js'
 
 export const login = async (req, res) => {
   try {
@@ -29,7 +30,8 @@ export const login = async (req, res) => {
         return res.status(401).json({ error: 'Invalid email or password' })
       }
       const role = isFinanceManager ? 'super admin' : (superAdmin.role || 'super admin')
-      return res.json({ email: superAdmin.email, role, department: superAdmin.department || '' })
+      const token = generateToken({ email: superAdmin.email, role, department: superAdmin.department || '' })
+      return res.json({ email: superAdmin.email, role, department: superAdmin.department || '', token })
     }
 
     // Check Admin (regular admins only, not super admins)
@@ -39,7 +41,8 @@ export const login = async (req, res) => {
         return res.status(401).json({ error: 'Invalid email or password' })
       }
       const role = isFinanceManager ? 'super admin' : (admin.role || 'admin')
-      return res.json({ email: admin.email, role, department: admin.department || '' })
+      const token = generateToken({ email: admin.email, role, department: admin.department || '' })
+      return res.json({ email: admin.email, role, department: admin.department || '', token })
     }
 
     // Check User
@@ -50,11 +53,13 @@ export const login = async (req, res) => {
       }
       // Finance manager always gets admin-level access
       const role = isFinanceManager ? 'super admin' : (user.role || 'user')
+      const token = generateToken({ email: user.email, role, department: user.department || '' })
       return res.json({
         email: user.email,
         role,
         department: user.department || '',
         createdBy: user.createdBy || '',
+        token,
       })
     }
 
@@ -67,9 +72,11 @@ export const login = async (req, res) => {
 
 export const changePassword = async (req, res) => {
   try {
-    const { email, currentPassword, newPassword } = req.body
-    if (!email || !currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Email, current password, and new password are required' })
+    const { currentPassword, newPassword } = req.body
+    const email = req.user.email
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' })
     }
 
     const normalizedEmail = email.trim().toLowerCase()
@@ -124,9 +131,9 @@ export const changePassword = async (req, res) => {
 
 export const getMe = async (req, res) => {
   try {
-    const email = String(req.headers['x-user-email'] || '').trim().toLowerCase()
+    const email = req.user.email
     if (!email) {
-      return res.status(401).json({ error: 'Email required' })
+      return res.status(401).json({ error: 'Authentication required' })
     }
 
     const [admin, superAdmin, user] = await Promise.all([
@@ -162,8 +169,12 @@ export const getMe = async (req, res) => {
   }
 }
 
-const RESET_SECRET = process.env.RESET_TOKEN_SECRET || 'pcv-reset-secret'
+const RESET_SECRET = process.env.RESET_TOKEN_SECRET
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://pettycashvoucher.netlify.app'
+
+if (!RESET_SECRET) {
+  throw new Error('RESET_TOKEN_SECRET must be set in environment variables')
+}
 
 function createResetToken(email) {
   const expires = Date.now() + 30 * 60 * 1000

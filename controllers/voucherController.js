@@ -34,9 +34,9 @@ async function enrichVoucher(voucher) {
 
 export const getVouchers = async (req, res) => {
   try {
-    const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const email = req.user.email
     if (!email) {
-      return res.status(401).json({ error: 'Unauthorized' })
+      return res.status(401).json({ error: 'Authentication required' })
     }
 
     const account = await findAccountByEmail(email)
@@ -151,9 +151,9 @@ export const updateVoucherStatus = async (req, res) => {
       return res.status(400).json({ error: 'Status is required' })
     }
 
-    const updater = String(req.headers['x-user-email'] || '').trim().toLowerCase()
+    const updater = req.user.email
     if (!updater) {
-      return res.status(403).json({ error: 'User email required' })
+      return res.status(403).json({ error: 'Authentication required' })
     }
 
     if (status === 'Processed' || status === 'Rejected') {

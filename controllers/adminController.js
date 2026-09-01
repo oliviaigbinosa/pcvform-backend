@@ -18,7 +18,7 @@ function getCreatedAt(user) {
 
 export const listUsers = async (req, res) => {
   try {
-    const email = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const email = req.user.email
     const isSuper = await isSuperAdminEmail(email)
     const isFinanceManager = email === FINANCE_MANAGER_EMAIL
 
@@ -57,7 +57,7 @@ export const listUsers = async (req, res) => {
 export const createUser = async (req, res) => {
   try {
     const { email, password, createdBy, department, role } = req.body
-    const creator = String(req.headers['x-admin-email'] || req.body.createdBy || '').trim().toLowerCase()
+    const creator = req.user.email
     if (!email) {
       return res.status(400).json({ error: 'Email is required' })
     }
@@ -154,7 +154,7 @@ export const createUser = async (req, res) => {
 
 export const listUserEmails = async (req, res) => {
   try {
-    const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const requesterEmail = req.user.email
     const requester = await findAccountByEmail(requesterEmail)
     if (!requester) {
       return res.status(403).json({ error: 'Admin access required' })
@@ -173,7 +173,7 @@ export const listUserEmails = async (req, res) => {
 
 export const listAdminEmails = async (req, res) => {
   try {
-    const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const requesterEmail = req.user.email
     const requester = await findAccountByEmail(requesterEmail)
     if (!requester) {
       return res.status(403).json({ error: 'Admin access required' })
@@ -193,7 +193,7 @@ export const listAdminEmails = async (req, res) => {
 
 export const validateManagerEmail = async (req, res) => {
   try {
-    const requesterEmail = String(req.headers['x-admin-email'] || req.headers['x-user-email'] || '').trim().toLowerCase()
+    const requesterEmail = req.user.email
     const targetEmailRaw = String(req.query.email || '').trim()
 
     if (!requesterEmail) {
@@ -283,7 +283,7 @@ export const validateManagerEmail = async (req, res) => {
 
 export const deleteUser = async (req, res) => {
   try {
-    const requesterEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase()
+    const requesterEmail = req.user.email
     if (!requesterEmail) {
       return res.status(401).json({ error: 'Unauthorized' })
     }

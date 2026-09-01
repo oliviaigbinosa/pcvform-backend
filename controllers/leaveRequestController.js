@@ -7,7 +7,7 @@ import { FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
 
 export const getLeaveRequests = async (req, res) => {
   try {
-    const email = String(req.headers['x-admin-email'] || req.headers['x-user-email'] || '').trim().toLowerCase()
+    const email = req.user.email
     const [admin, user, superAdmin] = await Promise.all([
       email ? Admin.findOne({ email }).lean() : null,
       email ? User.findOne({ email }).lean() : null,

@@ -28,7 +28,7 @@ app.use(helmet())
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://pettycashvoucher.netlify.app',
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000/',
   credentials: true
 }))
 

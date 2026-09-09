@@ -34,6 +34,26 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }))
 
+// Ensure `req.query` is a writable own-property before sanitizer runs.
+// Express 5 exposes `req.query` as an accessor on the prototype in some
+// environments; `express-mongo-sanitize` attempts to assign into it which
+// can throw "only one getter" errors on some platforms (Render). Create
+// a writable shadow property per-request to avoid that.
+app.use((req, _res, next) => {
+  try {
+    const q = req.query
+    Object.defineProperty(req, 'query', {
+      value: q,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    })
+  } catch (e) {
+    // If this fails for any reason, continue without blocking the request
+  }
+  next()
+})
+
 // Sanitize user input to prevent NoSQL injection
 app.use(mongoSanitize())
 

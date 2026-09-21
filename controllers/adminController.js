@@ -3,6 +3,7 @@ import User from '../models/User.js'
 import Admin from '../models/Admin.js'
 import SuperAdmin from '../models/SuperAdmin.js'
 import { findAccountByEmail, isSuperAdminEmail, FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
+import { validateSmtpConfig } from './emailController.js'
 
 function isGetPayedMailEmail(email) {
   return /^[^\s@]+@getpayedmail\.com$/.test(email)
@@ -63,6 +64,14 @@ export const createUser = async (req, res) => {
     }
     if (!department) {
       return res.status(400).json({ error: 'Department is required' })
+    }
+
+    // Validate SMTP configuration before creating user
+    try {
+      validateSmtpConfig()
+    } catch (smtpError) {
+      console.error('SMTP validation failed', smtpError)
+      return res.status(500).json({ error: 'SMTP is not configured. Users cannot be onboarded without email functionality.' })
     }
 
     const normalizedEmail = email.trim().toLowerCase()

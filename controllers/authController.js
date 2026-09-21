@@ -4,7 +4,7 @@ import Admin from '../models/Admin.js'
 import User from '../models/User.js'
 import SuperAdmin from '../models/SuperAdmin.js'
 import { FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
-import { sendMail } from './emailController.js'
+import { sendMail, validateSmtpConfig } from './emailController.js'
 import { generateToken } from '../middleware/auth.js'
 
 export const login = async (req, res) => {
@@ -170,7 +170,7 @@ export const getMe = async (req, res) => {
 }
 
 const RESET_SECRET = process.env.RESET_TOKEN_SECRET
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://pettycashvoucher.netlify.app'
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
 if (!RESET_SECRET) {
   throw new Error('RESET_TOKEN_SECRET must be set in environment variables')
@@ -211,18 +211,27 @@ export const forgotPassword = async (req, res) => {
       return res.status(404).json({ error: 'No account found with that email address' })
     }
 
+    // Validate SMTP configuration before sending reset email
+    try {
+      validateSmtpConfig()
+    } catch (smtpError) {
+      console.error('SMTP validation failed', smtpError)
+      return res.status(500).json({ error: 'Failed to send reset email. SMTP not set' })
+    }
+
     const token = createResetToken(normalizedEmail)
     const resetUrl = `${FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(normalizedEmail)}`
-    const fromEmail = process.env.RESEND_FROM
+    const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER
     if (!fromEmail) {
       return res.status(500).json({ error: 'FROM email is not configured' })
     }
 
-    await sendMail({
-      from: fromEmail,
-      to: normalizedEmail,
-      subject: 'Reset your Petty Cash Voucher password',
-      text: `Hello,
+    try {
+      await sendMail({
+        from: fromEmail,
+        to: normalizedEmail,
+        subject: 'Reset your Petty Cash Voucher password',
+        text: `Hello,
 
 You requested a password reset for your Petty Cash Voucher account.
 
@@ -230,7 +239,11 @@ Click the link below to set a new password:
 ${resetUrl}
 
 This link will expire in 30 minutes. If you did not request this reset, please ignore this email.`,
-    })
+      })
+    } catch (emailError) {
+      console.error('Failed to send reset email', emailError)
+      return res.status(500).json({ error: 'Failed to send reset email. SMTP not set' })
+    }
 
     return res.json({ ok: true })
   } catch (error) {

@@ -15,6 +15,7 @@ import {
   sendVoucherDeclinedEmailInternal,
   sendVoucherProcessedEmailInternal,
   sendVoucherRejectedEmailInternal,
+  validateSmtpConfig,
 } from './emailController.js'
 
 const FINANCE_EMAIL_LOWER = FINANCE_EMAIL.toLowerCase()
@@ -163,6 +164,16 @@ export const updateVoucherStatus = async (req, res) => {
       }
     }
 
+    // Validate SMTP configuration before updating voucher status
+    if (status === 'Approved' || status === 'Declined' || status === 'Processed' || status === 'Rejected') {
+      try {
+        validateSmtpConfig()
+      } catch (smtpError) {
+        console.error('SMTP validation failed', smtpError)
+        return res.status(500).json({ error: 'SMTP is not configured. Voucher status cannot be updated without email functionality.' })
+      }
+    }
+
     const update = { status }
     if (status === 'Approved') {
       update.approvedBy = updater
@@ -180,18 +191,15 @@ export const updateVoucherStatus = async (req, res) => {
     }
 
     const voucherObj = voucher.toObject()
-    try {
-      if (status === 'Approved') {
-        await sendApprovedCcEmailInternal(voucherObj)
-      } else if (status === 'Declined') {
-        await sendVoucherDeclinedEmailInternal(voucherObj)
-      } else if (status === 'Processed') {
-        await sendVoucherProcessedEmailInternal(voucherObj)
-      } else if (status === 'Rejected') {
-        await sendVoucherRejectedEmailInternal(voucherObj)
-      }
-    } catch (emailError) {
-      console.error(`Failed to send ${status} notification email for voucher ${id}`, emailError)
+
+    if (status === 'Approved') {
+      await sendApprovedCcEmailInternal(voucherObj)
+    } else if (status === 'Declined') {
+      await sendVoucherDeclinedEmailInternal(voucherObj)
+    } else if (status === 'Processed') {
+      await sendVoucherProcessedEmailInternal(voucherObj)
+    } else if (status === 'Rejected') {
+      await sendVoucherRejectedEmailInternal(voucherObj)
     }
 
     const result = await enrichVoucher(voucherObj)

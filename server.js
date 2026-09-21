@@ -1,6 +1,6 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import helmet from 'helmet'
 import mongoSanitize from 'express-mongo-sanitize'
 import { connectDb, seedAdmin } from './config/database.js'
@@ -10,7 +10,6 @@ import emailRoutes from './routes/emailRoutes.js'
 import voucherRoutes from './routes/voucherRoutes.js'
 import leaveRequestRoutes from './routes/leaveRequestRoutes.js'
 
-dotenv.config()
 
 // Validate required environment variables
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'RESET_TOKEN_SECRET']
@@ -26,11 +25,15 @@ const app = express()
 // Security headers
 app.use(helmet())
 
-// CORS configuration
+// CORS configuration — allow forcing localhost via env for local development
+const useLocalHost = String(process.env.FORCE_LOCALHOST || '').toLowerCase() === 'true'
+const frontendOrigin = useLocalHost ? 'http://localhost:3000' : (process.env.FRONTEND_URL || 'http://localhost:3000')
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: frontendOrigin,
   credentials: true
 }))
+
+console.log('CORS origin set to:', frontendOrigin)
 
 app.use(express.json({ limit: '10mb' }))
 

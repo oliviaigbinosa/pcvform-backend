@@ -2,7 +2,7 @@ import LeaveRequest from '../models/LeaveRequest.js'
 import Admin from '../models/Admin.js'
 import User from '../models/User.js'
 import SuperAdmin from '../models/SuperAdmin.js'
-import { sendLeaveRequestEmail, sendLeaveStatusEmail } from '../controllers/emailController.js'
+import { sendLeaveRequestEmail, sendLeaveStatusEmail, validateSmtpConfig } from '../controllers/emailController.js'
 import { FINANCE_MANAGER_EMAIL } from '../utils/superAdmin.js'
 
 export const getLeaveRequests = async (req, res) => {
@@ -89,6 +89,16 @@ export const createLeaveRequest = async (req, res) => {
       return res.status(400).json({ error: 'Missing required leave request fields' })
     }
 
+    // Validate SMTP configuration before creating leave request
+    if (departmentManager) {
+      try {
+        validateSmtpConfig()
+      } catch (smtpError) {
+        console.error('SMTP validation failed', smtpError)
+        return res.status(500).json({ error: 'SMTP is not configured. Leave requests cannot be submitted without email functionality.' })
+      }
+    }
+
     const leave = await LeaveRequest.create({
       employeeName,
       departmentManager,
@@ -108,12 +118,7 @@ export const createLeaveRequest = async (req, res) => {
     leaveObj.submitterIsAdmin = Boolean(admin)
 
     if (departmentManager) {
-      try {
-        await sendLeaveRequestEmail(leaveObj)
-      } catch (emailError) {
-        console.error('Failed to send leave request email', emailError)
-        return res.status(201).json({ ...leaveObj, emailSent: false, emailError: emailError.message })
-      }
+      await sendLeaveRequestEmail(leaveObj)
     }
 
     return res.status(201).json({ ...leaveObj, emailSent: true })
@@ -131,6 +136,18 @@ export const updateLeaveRequestStatus = async (req, res) => {
       return res.status(400).json({ error: 'Status is required' })
     }
 
+    const normalized = String(status).toLowerCase()
+
+    // Validate SMTP configuration before updating leave request status
+    if (normalized === 'approved' || normalized === 'declined') {
+      try {
+        validateSmtpConfig()
+      } catch (smtpError) {
+        console.error('SMTP validation failed', smtpError)
+        return res.status(500).json({ error: 'SMTP is not configured. Status cannot be updated without email functionality.' })
+      }
+    }
+
     const leave = await LeaveRequest.findByIdAndUpdate(
       id,
       { status },
@@ -144,13 +161,9 @@ export const updateLeaveRequestStatus = async (req, res) => {
       email: String(leave.submittedBy || '').toLowerCase(),
     }).lean()
 
-    const normalized = String(status).toLowerCase()
     if (normalized === 'approved' || normalized === 'declined') {
-      try {
-        await sendLeaveStatusEmail(leave.toObject(), status)
-      } catch (emailError) {
-        console.error('Failed to send leave status email', emailError)
-      }
+      const approverEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase()
+      await sendLeaveStatusEmail(leave.toObject(), status, approverEmail)
     }
 
     const result = { ...leave.toObject(), id: leave._id.toString() }
